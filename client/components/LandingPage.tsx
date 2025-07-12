@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Recycle, Shirt, Handshake, Globe } from "lucide-react"
+import { Recycle, Shirt, Handshake, Globe } from "@/components/icons" // Updated import path
 import Link from "next/link"
 
 export default function LandingPage() {

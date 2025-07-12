@@ -1,214 +1,219 @@
-# ReWear Platform
+# ReWear: Sustainable Fashion Swapping Platform
 
-ReWear is a sustainable fashion swapping platform designed to give clothes a second life and promote eco-friendly consumption habits. This monorepo contains both the Next.js frontend (`client`) and the Node.js/Express backend (`server`).
+ReWear is a full-stack web application designed to facilitate sustainable fashion by allowing users to swap clothes with each other. This platform aims to reduce textile waste and promote a circular economy in the fashion industry.
 
 ## Table of Contents
 
-- [ReWear Platform](#rewear-platform)
-  - [Table of Contents](#table-of-contents)
-  - [Features](#features)
-  - [Technologies Used](#technologies-used)
-  - [Getting Started](#getting-started)
-    - [Prerequisites](#prerequisites)
-    - [Installation](#installation)
-      - [1. Clone the repository](#1-clone-the-repository)
-      - [2. Backend Setup](#2-backend-setup)
-      - [3. Frontend Setup](#3-frontend-setup)
-      - [4. Database Configuration](#4-database-configuration)
-  - [Running the Application](#running-the-application)
-    - [Backend](#backend)
-    - [Frontend](#frontend)
-  - [Usage](#usage)
-  - [Admin Features](#admin-features)
-  - [API Endpoints](#api-endpoints)
-  - [Deployment](#deployment)
-  - [Troubleshooting](#troubleshooting)
-  - [Roadmap](#roadmap)
-  - [Contributing](#contributing)
-  - [License](#license)
+- [Features](#features)
+- [Technologies Used](#technologies-used)
+- [Installation and Setup](#installation-and-setup)
+  - [Prerequisites](#prerequisites)
+  - [Backend Setup](#backend-setup)
+  - [Frontend Setup](#frontend-setup)
+- [Development Scripts](#development-scripts)
+- [Usage](#usage)
+- [Admin Features](#admin-features)
+- [API Endpoints](#api-endpoints)
+- [Deployment](#deployment)
+- [Troubleshooting](#troubleshooting)
+- [Roadmap](#roadmap)
+- [Contributing](#contributing)
+- [License](#license)
 
 ## Features
 
-- User authentication (registration, login, logout)
-- Item listing and management
-- Swap request initiation and management
-- Real-time notifications for swap updates
-- User profiles
-- Admin panel for managing users and items (future)
-- Search and filter items (future)
+- **User Authentication**: Secure registration and login for users.
+- **Item Listing**: Users can list clothes they want to swap with details like category, size, condition, and photos.
+- **Item Browsing**: Browse available items with search and filter options.
+- **Swap Requests**: Users can send and receive swap requests for items.
+- **Swap Management**: Accept, decline, and manage ongoing swaps.
+- **User Profiles**: View and manage personal profiles, listed items, and swap history.
+- **Real-time Notifications**: Get notified about new swap requests and status updates.
+- **Admin Panel**: (Future) Manage users, items, and disputes.
 
 ## Technologies Used
 
-**Frontend:**
-- Next.js 14 (App Router)
-- React
+**Frontend (Client)**:
+- Next.js (React Framework)
 - Tailwind CSS
 - Shadcn/ui
-- Lucide React (icons)
-- Socket.IO Client
+- Lucide React (Icons)
+- Socket.IO Client (for real-time features)
 
-**Backend:**
+**Backend (Server)**:
 - Node.js
 - Express.js
-- MongoDB (Mongoose)
-- JWT (JSON Web Tokens) for authentication
-- Bcrypt for password hashing
-- Socket.IO
-- Cloudinary (for image storage - future)
+- MongoDB (Database)
+- Mongoose (ODM)
+- JSON Web Tokens (JWT) for authentication
+- Bcrypt.js for password hashing
+- Socket.IO (for real-time features)
 
-## Getting Started
-
-Follow these instructions to get a copy of the project up and running on your local machine for development and testing purposes.
+## Installation and Setup
 
 ### Prerequisites
 
-- Node.js (v18 or higher)
-- npm (v8 or higher)
-- MongoDB (local or cloud instance like MongoDB Atlas)
+Before you begin, ensure you have the following installed:
 
-### Installation
+- Node.js (v18 or higher recommended)
+- npm or Yarn
+- MongoDB (local or cloud-based like MongoDB Atlas)
 
-#### 1. Clone the repository
+### Backend Setup
 
-\`\`\`bash
-git clone https://github.com/your-username/rewear-platform.git
-cd rewear-platform
-\`\`\`
+1.  **Clone the repository:**
+    \`\`\`bash
+    git clone <repository-url>
+    cd rewear-platform
+    \`\`\`
 
-#### 2. Backend Setup
+2.  **Navigate to the `server` directory:**
+    \`\`\`bash
+    cd server
+    \`\`\`
 
-Navigate into the `server` directory, install dependencies, and create your environment file.
+3.  **Install backend dependencies:**
+    \`\`\`bash
+    npm install
+    # or
+    yarn install
+    \`\`\`
 
-\`\`\`bash
-cd server
-npm install
-cp .env.example .env # Create a .env file from the example
-\`\`\`
+4.  **Create a `.env` file** in the `server` directory and add your environment variables:
+    \`\`\`dotenv
+    PORT=5000
+    MONGO_URI=your_mongodb_connection_string
+    JWT_SECRET=your_jwt_secret_key
+    \`\`\`
+    - Replace `your_mongodb_connection_string` with your MongoDB URI (e.g., `mongodb://localhost:27017/rewear` or your MongoDB Atlas connection string).
+    - Replace `your_jwt_secret_key` with a strong, random string for JWT signing.
 
-Edit the `.env` file with your MongoDB URI and JWT secret:
+5.  **Start the backend server:**
+    \`\`\`bash
+    npm start
+    # or
+    yarn start
+    \`\`\`
+    The server will run on `http://localhost:5000` (or the port you specified).
 
-\`\`\`
-MONGO_URI=your_mongodb_connection_string
-JWT_SECRET=your_jwt_secret_key
-PORT=5000
-\`\`\`
+### Frontend Setup
 
-#### 3. Frontend Setup
+1.  **Navigate to the `client` directory** in a new terminal window:
+    \`\`\`bash
+    cd client
+    \`\`\`
 
-Navigate into the `client` directory, install dependencies, and create your environment file.
+2.  **Install frontend dependencies:**
+    \`\`\`bash
+    npm install
+    # or
+    yarn install
+    \`\`\`
 
-\`\`\`bash
-cd ../client
-npm install
-cp .env.local.example .env.local # Create a .env.local file from the example
-\`\`\`
+3.  **Create a `.env.local` file** in the `client` directory and add your environment variables:
+    \`\`\`dotenv
+    NEXT_PUBLIC_API_BASE_URL=http://localhost:5000/api
+    NEXT_PUBLIC_SOCKET_URL=http://localhost:5000
+    \`\`\`
+    - Ensure `NEXT_PUBLIC_API_BASE_URL` points to your backend API.
+    - Ensure `NEXT_PUBLIC_SOCKET_URL` points to your backend Socket.IO server.
 
-Edit the `.env.local` file with your backend API base URL:
+4.  **Start the frontend development server:**
+    \`\`\`bash
+    npm run dev
+    # or
+    yarn dev
+    \`\`\`
+    The Next.js application will run on `http://localhost:3000` (or the next available port).
 
-\`\`\`
-NEXT_PUBLIC_API_BASE_URL=http://localhost:5000/api
-\`\`\`
+## Development Scripts
 
-#### 4. Database Configuration
+**Backend (server directory):**
+- `npm start`: Starts the Node.js server.
+- `npm run dev`: Starts the Node.js server with `nodemon` for automatic restarts on file changes (if `nodemon` is installed globally or as a dev dependency).
 
-Ensure your MongoDB instance is running and accessible via the `MONGO_URI` you provided in the `server/.env` file.
-
-## Running the Application
-
-You will need two separate terminal windows, one for the backend and one for the frontend.
-
-### Backend
-
-In the `server` directory:
-
-\`\`\`bash
-npm start
-\`\`\`
-
-The backend server will start on `http://localhost:5000` (or the `PORT` you specified).
-
-### Frontend
-
-In the `client` directory:
-
-\`\`\`bash
-npm run dev
-\`\`\`
-
-The Next.js development server will start on `http://localhost:3000`. Open your browser and navigate to `http://localhost:3000` to view the application.
+**Frontend (client directory):**
+- `npm run dev`: Starts the Next.js development server.
+- `npm run build`: Builds the Next.js application for production.
+- `npm run start`: Starts the Next.js production server (after building).
+- `npm run lint`: Runs ESLint to check for code quality issues.
 
 ## Usage
 
-- **Register/Login:** Create an account or log in to access the platform's features.
-- **List Items:** Upload details and images of clothes you want to swap.
-- **Browse Items:** Explore items listed by other users.
-- **Initiate Swaps:** Send swap requests for items you're interested in.
-- **Manage Swaps:** Accept, decline, or track your ongoing swaps.
+1.  **Register**: Create a new account on the platform.
+2.  **Login**: Access your account.
+3.  **List an Item**: Go to your dashboard or a dedicated "List Item" page to add clothes you want to swap. Provide details and upload images.
+4.  **Browse Items**: Explore items listed by other users. Use filters and search to find specific clothing.
+5.  **Send Swap Request**: If you find an item you like, send a swap request to its owner. You might offer one of your items in return.
+6.  **Manage Swaps**: Check your "My Swaps" or "Notifications" section to see incoming requests, accept or decline them, and track the status of your ongoing swaps.
+7.  **Arrange Exchange**: Once a swap is accepted, communicate with the other user to arrange the physical exchange of items.
 
 ## Admin Features
 
-(To be implemented)
+(To be implemented in future iterations)
 - User management (view, edit, delete users)
-- Item management (view, edit, delete items)
-- Swap management (monitor and resolve swap issues)
+- Item moderation (approve, reject, remove items)
+- Dispute resolution
 
 ## API Endpoints
 
-**Authentication:**
-- `POST /api/auth/register`
-- `POST /api/auth/login`
-- `GET /api/auth/me`
+**Authentication (`/api/auth`)**
+- `POST /api/auth/register`: Register a new user.
+- `POST /api/auth/login`: Log in a user.
+- `GET /api/auth/me`: Get current user's profile (protected).
 
-**Items:**
-- `GET /api/items` (get all items)
-- `GET /api/items/:id` (get single item)
-- `POST /api/items` (create new item)
-- `PUT /api/items/:id` (update item)
-- `DELETE /api/items/:id` (delete item)
-- `GET /api/items/user/:userId` (get items by user)
+**Items (`/api/items`)**
+- `POST /api/items`: Create a new item (protected).
+- `GET /api/items`: Get all items (can be filtered/paginated).
+- `GET /api/items/:id`: Get a single item by ID.
+- `PUT /api/items/:id`: Update an item by ID (protected, owner only).
+- `DELETE /api/items/:id`: Delete an item by ID (protected, owner only).
+- `GET /api/items/user/:userId`: Get items by a specific user.
 
-**Swaps:**
-- `GET /api/swaps` (get all swaps)
-- `GET /api/swaps/:id` (get single swap)
-- `POST /api/swaps` (create new swap request)
-- `PUT /api/swaps/:id/accept` (accept swap)
-- `PUT /api/swaps/:id/decline` (decline swap)
-- `PUT /api/swaps/:id/complete` (mark swap as complete)
-
-**Admin:**
-- `GET /api/admin/users`
-- `DELETE /api/admin/users/:id`
-- `GET /api/admin/items`
-- `DELETE /api/admin/items/:id`
+**Swaps (`/api/swaps`)**
+- `POST /api/swaps`: Create a new swap request (protected).
+- `GET /api/swaps/user/:userId`: Get all swaps involving a user (protected).
+- `GET /api/swaps/:id`: Get a single swap by ID.
+- `PUT /api/swaps/:id/accept`: Accept a swap request (protected).
+- `PUT /api/swaps/:id/decline`: Decline a swap request (protected).
+- `PUT /api/swaps/:id/complete`: Mark a swap as completed (protected).
 
 ## Deployment
 
-### Frontend (Next.js)
+### Vercel (Frontend)
 
-The Next.js application can be easily deployed to Vercel.
-1. Link your GitHub repository to Vercel.
-2. Ensure your `NEXT_PUBLIC_API_BASE_URL` environment variable is set correctly in Vercel for your production backend URL.
+1.  **Build the Next.js application:**
+    \`\`\`bash
+    cd client
+    npm run build
+    \`\`\`
+2.  **Deploy to Vercel:**
+    - Connect your GitHub repository to Vercel.
+    - Configure the root directory for the project to `client/`.
+    - Add `NEXT_PUBLIC_API_BASE_URL` and `NEXT_PUBLIC_SOCKET_URL` environment variables in Vercel settings, pointing to your deployed backend URL.
 
-### Backend (Node.js/Express)
+### Render/Heroku/AWS (Backend)
 
-The Node.js/Express backend can be deployed to platforms like Render, Heroku, or a custom VPS.
-1. Set up your environment variables (`MONGO_URI`, `JWT_SECRET`, `PORT`) on your chosen hosting platform.
-2. Ensure your backend is accessible from your frontend deployment.
+1.  **Push your `server` directory to a separate repository** or configure your deployment service to deploy only the `server` directory.
+2.  **Configure environment variables** (`PORT`, `MONGO_URI`, `JWT_SECRET`) in your chosen hosting provider.
+3.  **Deploy the Node.js application.**
 
 ## Troubleshooting
 
-- **"Couldn't find any `pages` or `app` directory"**: Ensure you are running `npm run dev` from within the `client` directory and that the `app` directory exists inside `client`.
-- **Backend not starting**: Check your `server/.env` file for correct `MONGO_URI` and `JWT_SECRET`. Ensure MongoDB is running.
-- **Frontend not connecting to backend**: Verify `NEXT_PUBLIC_API_BASE_URL` in `client/.env.local` points to the correct backend address (e.g., `http://localhost:5000/api`). Check browser console for network errors.
+- **"Port 3000 already in use"**: If you see this, another process is using port 3000. You can either kill the process or Next.js will automatically try the next available port (e.g., 3001).
+- **Backend not connecting to MongoDB**: Double-check your `MONGO_URI` in the `server/.env` file. Ensure your MongoDB instance is running and accessible.
+- **Frontend not connecting to Backend**: Verify `NEXT_PUBLIC_API_BASE_URL` and `NEXT_PUBLIC_SOCKET_URL` in `client/.env.local` match your backend server's address and port.
+- **"Element type is invalid" or "X is not exported from lucide-react"**: Ensure all `lucide-react` icons are correctly imported and that your `package.json` has `lucide-react` installed. If issues persist, try deleting `node_modules` and `package-lock.json` (or `yarn.lock`) in both `client` and `server` directories and reinstalling dependencies.
 
 ## Roadmap
 
-- Implement image upload functionality using Cloudinary.
-- Develop user dashboard for managing profile, items, and swaps.
-- Create a comprehensive browse/catalog page with search and filtering.
-- Implement real-time chat for swap negotiations.
-- Add review and rating system for users.
-- Enhance admin panel features.
+- Implement user dashboards with item management and swap history.
+- Add a robust search and filtering system for items.
+- Develop a real-time chat feature for swappers.
+- Introduce a rating and review system for users.
+- Build an admin panel for content and user moderation.
+- Integrate image upload services (e.g., Cloudinary).
+- Implement push notifications.
 
 ## Contributing
 
@@ -217,3 +222,4 @@ Contributions are welcome! Please feel free to submit a pull request or open an 
 ## License
 
 This project is licensed under the MIT License.
+\`\`\`

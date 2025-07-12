@@ -13,8 +13,14 @@ import {
   RadialBarChart,
   Area,
   AreaChart,
+  ResponsiveContainer,
+  XAxis,
+  YAxis,
+  Tooltip,
+  Legend,
 } from "recharts"
 
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import {
   type ChartConfig,
   ChartContainer,
@@ -22,139 +28,167 @@ import {
   ChartLegendContent,
   ChartTooltip,
   ChartTooltipContent,
-} from "@/components/ui/chart"
+} from "@/components/ui/chart-lib"
 
-// Define types for common chart props
-type ChartProps = {
+// Define a type for common chart props
+type CommonChartProps = {
   data: Record<string, any>[]
-  config: ChartConfig
+  chartConfig: ChartConfig
   className?: string
 }
 
 // Line Chart Component
-const CustomLineChart: React.FC<
-  ChartProps & {
-    lines: { dataKey: string; stroke: string; type?: "monotone" | "linear" }[]
-    xAxisDataKey: string
-  }
-> = ({ data, config, className, lines, xAxisDataKey }) => (
-  <ChartContainer config={config} className={className}>
+interface LineChartProps extends CommonChartProps {
+  category: string
+  index: string
+}
+
+const LineChartComponent: React.FC<LineChartProps> = ({ data, chartConfig, category, index, className }) => (
+  <ChartContainer config={chartConfig} className={className}>
     <LineChart accessibilityLayer data={data}>
       <CartesianGrid vertical={false} />
-      <ChartTooltip content={<ChartTooltipContent />} />
-      <ChartLegend content={<ChartLegendContent />} />
-      {lines.map((lineProps, index) => (
-        <Line key={index} dataKey={lineProps.dataKey} stroke={lineProps.stroke} type={lineProps.type || "monotone"} />
-      ))}
+      <XAxis
+        dataKey={index}
+        tickLine={false}
+        tickMargin={10}
+        axisLine={false}
+        tickFormatter={(value) => value.slice(0, 3)}
+      />
+      <YAxis />
+      <Tooltip content={<ChartTooltipContent />} />
+      <Legend content={<ChartLegendContent />} />
+      {Object.entries(chartConfig).map(([key, { color, label }]) => {
+        if (key !== category && key !== index) {
+          return <Line key={key} dataKey={key} type="monotone" stroke={`hsl(${color})`} name={label} />
+        }
+        return null
+      })}
     </LineChart>
   </ChartContainer>
 )
 
 // Bar Chart Component
-const CustomBarChart: React.FC<
-  ChartProps & {
-    bars: { dataKey: string; fill: string }[]
-    xAxisDataKey: string
-  }
-> = ({ data, config, className, bars, xAxisDataKey }) => (
-  <ChartContainer config={config} className={className}>
+interface BarChartProps extends CommonChartProps {
+  category: string
+  index: string
+}
+
+const BarChartComponent: React.FC<BarChartProps> = ({ data, chartConfig, category, index, className }) => (
+  <ChartContainer config={chartConfig} className={className}>
     <BarChart accessibilityLayer data={data}>
       <CartesianGrid vertical={false} />
-      <ChartTooltip content={<ChartTooltipContent />} />
-      <ChartLegend content={<ChartLegendContent />} />
-      {bars.map((barProps, index) => (
-        <Bar key={index} dataKey={barProps.dataKey} fill={barProps.fill} />
-      ))}
+      <XAxis
+        dataKey={index}
+        tickLine={false}
+        tickMargin={10}
+        axisLine={false}
+        tickFormatter={(value) => value.slice(0, 3)}
+      />
+      <YAxis />
+      <Tooltip content={<ChartTooltipContent />} />
+      <Legend content={<ChartLegendContent />} />
+      {Object.entries(chartConfig).map(([key, { color, label }]) => {
+        if (key !== category && key !== index) {
+          return <Bar key={key} dataKey={key} fill={`hsl(${color})`} name={label} />
+        }
+        return null
+      })}
     </BarChart>
   </ChartContainer>
 )
 
-// Pie Chart Component
-const CustomPieChart: React.FC<
-  ChartProps & {
-    pieDataKey: string
-    nameKey: string
-    innerRadius?: number
-    outerRadius?: number
-    fill?: string
-  }
-> = ({
-  data,
-  config,
-  className,
-  pieDataKey,
-  nameKey,
-  innerRadius = 80,
-  outerRadius = 100,
-  fill = "var(--color-primary)",
-}) => (
-  <ChartContainer config={config} className={className}>
-    <PieChart>
-      <ChartTooltip content={<ChartTooltipContent />} />
-      <Pie
-        data={data}
-        dataKey={pieDataKey}
-        nameKey={nameKey}
-        innerRadius={innerRadius}
-        outerRadius={outerRadius}
-        fill={fill}
+// Area Chart Component
+interface AreaChartProps extends CommonChartProps {
+  category: string
+  index: string
+}
+
+const AreaChartComponent: React.FC<AreaChartProps> = ({ data, chartConfig, category, index, className }) => (
+  <ChartContainer config={chartConfig} className={className}>
+    <AreaChart accessibilityLayer data={data}>
+      <CartesianGrid vertical={false} />
+      <XAxis
+        dataKey={index}
+        tickLine={false}
+        tickMargin={10}
+        axisLine={false}
+        tickFormatter={(value) => value.slice(0, 3)}
       />
-      <ChartLegend content={<ChartLegendContent />} />
+      <YAxis />
+      <Tooltip content={<ChartTooltipContent />} />
+      <Legend content={<ChartLegendContent />} />
+      {Object.entries(chartConfig).map(([key, { color, label }]) => {
+        if (key !== category && key !== index) {
+          return (
+            <Area
+              key={key}
+              dataKey={key}
+              type="monotone"
+              fill={`hsl(${color})`}
+              stroke={`hsl(${color})`}
+              name={label}
+            />
+          )
+        }
+        return null
+      })}
+    </AreaChart>
+  </ChartContainer>
+)
+
+// Pie Chart Component
+interface PieChartProps extends CommonChartProps {
+  category: string
+  nameKey?: string
+}
+
+const PieChartComponent: React.FC<PieChartProps> = ({ data, chartConfig, category, nameKey = "name", className }) => (
+  <ChartContainer config={chartConfig} className={className}>
+    <PieChart>
+      <Tooltip content={<ChartTooltipContent />} />
+      <Legend content={<ChartLegendContent />} />
+      <Pie data={data} dataKey={category} nameKey={nameKey} />
     </PieChart>
   </ChartContainer>
 )
 
 // Radial Bar Chart Component
-const CustomRadialBarChart: React.FC<
-  ChartProps & {
-    radialDataKey: string
-    innerRadius?: number
-    outerRadius?: number
-    barSize?: number
-    fill?: string
-  }
-> = ({
+interface RadialBarChartProps extends CommonChartProps {
+  category: string
+  nameKey?: string
+}
+
+const RadialBarChartComponent: React.FC<RadialBarChartProps> = ({
   data,
-  config,
+  chartConfig,
+  category,
+  nameKey = "name",
   className,
-  radialDataKey,
-  innerRadius = 20,
-  outerRadius = 140,
-  barSize = 10,
-  fill = "var(--color-primary)",
 }) => (
-  <ChartContainer config={config} className={className}>
-    <RadialBarChart innerRadius={innerRadius} outerRadius={outerRadius} barSize={barSize} data={data}>
-      <ChartTooltip content={<ChartTooltipContent />} />
-      <RadialBar dataKey={radialDataKey} fill={fill} />
-      <ChartLegend content={<ChartLegendContent />} />
+  <ChartContainer config={chartConfig} className={className}>
+    <RadialBarChart innerRadius={20} outerRadius={140} barSize={10} data={data}>
+      <Tooltip content={<ChartTooltipContent />} />
+      <Legend content={<ChartLegendContent />} />
+      <RadialBar dataKey={category} />
     </RadialBarChart>
   </ChartContainer>
 )
 
-// Area Chart Component
-const CustomAreaChart: React.FC<
-  ChartProps & {
-    areas: { dataKey: string; stroke: string; fill: string; type?: "monotone" | "linear" }[]
-    xAxisDataKey: string
-  }
-> = ({ data, config, className, areas, xAxisDataKey }) => (
-  <ChartContainer config={config} className={className}>
-    <AreaChart accessibilityLayer data={data}>
-      <CartesianGrid vertical={false} />
-      <ChartTooltip content={<ChartTooltipContent />} />
-      <ChartLegend content={<ChartLegendContent />} />
-      {areas.map((areaProps, index) => (
-        <Area
-          key={index}
-          dataKey={areaProps.dataKey}
-          stroke={areaProps.stroke}
-          fill={areaProps.fill}
-          type={areaProps.type || "monotone"}
-        />
-      ))}
-    </AreaChart>
-  </ChartContainer>
-)
-
-export { CustomLineChart, CustomBarChart, CustomPieChart, CustomRadialBarChart, CustomAreaChart }
+export {
+  LineChartComponent,
+  BarChartComponent,
+  AreaChartComponent,
+  PieChartComponent,
+  RadialBarChartComponent,
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+  ChartContainer,
+  ChartTooltip,
+  ChartTooltipContent,
+  ChartLegend,
+  ChartLegendContent,
+  ResponsiveContainer,
+}

@@ -12,19 +12,19 @@ const swapSchema = new mongoose.Schema(
       ref: "User",
       required: true,
     },
-    requestedItem: {
+    requesterItem: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Item",
       required: true,
     },
-    offeredItem: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "Item",
-      required: false, // Optional, for direct swaps
-    },
-    receiver: {
+    owner: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
+      required: true,
+    },
+    ownerItem: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Item",
       required: true,
     },
     status: {
@@ -106,7 +106,7 @@ const swapSchema = new mongoose.Schema(
         comment: String,
         timestamp: Date,
       },
-      receiverRating: {
+      ownerRating: {
         score: {
           type: Number,
           min: 1,
@@ -116,6 +116,11 @@ const swapSchema = new mongoose.Schema(
         timestamp: Date,
       },
     },
+    requestedAt: {
+      type: Date,
+      default: Date.now,
+    },
+    acceptedAt: Date,
     completedAt: Date,
     expiresAt: {
       type: Date,
@@ -140,15 +145,15 @@ const swapSchema = new mongoose.Schema(
 
 // Indexes for better query performance
 swapSchema.index({ requester: 1, status: 1 })
-swapSchema.index({ receiver: 1, status: 1 })
-swapSchema.index({ requestedItem: 1 })
-swapSchema.index({ offeredItem: 1 })
+swapSchema.index({ owner: 1, status: 1 })
+swapSchema.index({ requesterItem: 1 })
+swapSchema.index({ ownerItem: 1 })
 swapSchema.index({ status: 1, createdAt: -1 })
 swapSchema.index({ expiresAt: 1 })
 
 // Virtual for swap participants
 swapSchema.virtual("participants").get(function () {
-  return [this.requester, this.receiver]
+  return [this.requester, this.owner]
 })
 
 // Method to add message to conversation
@@ -178,14 +183,14 @@ swapSchema.methods.getUnreadCount = function (userId) {
 
 // Method to check if user is participant
 swapSchema.methods.isParticipant = function (userId) {
-  return this.requester.toString() === userId.toString() || this.receiver.toString() === userId.toString()
+  return this.requester.toString() === userId.toString() || this.owner.toString() === userId.toString()
 }
 
 // Method to get other participant
 swapSchema.methods.getOtherParticipant = function (userId) {
   if (this.requester.toString() === userId.toString()) {
-    return this.receiver
-  } else if (this.receiver.toString() === userId.toString()) {
+    return this.owner
+  } else if (this.owner.toString() === userId.toString()) {
     return this.requester
   }
   return null
@@ -200,7 +205,9 @@ swapSchema.methods.updateStatus = function (newStatus, note = "") {
     note: note,
   })
 
-  if (newStatus === "completed") {
+  if (newStatus === "accepted") {
+    this.acceptedAt = new Date()
+  } else if (newStatus === "completed") {
     this.completedAt = new Date()
   }
 
@@ -219,7 +226,7 @@ swapSchema.methods.getSwapValue = function () {
 // Static method to get user's swaps
 swapSchema.statics.getUserSwaps = function (userId, status = null) {
   const query = {
-    $or: [{ requester: userId }, { receiver: userId }],
+    $or: [{ requester: userId }, { owner: userId }],
   }
 
   if (status) {
@@ -228,27 +235,27 @@ swapSchema.statics.getUserSwaps = function (userId, status = null) {
 
   return this.find(query)
     .populate("requester", "username firstName lastName avatar")
-    .populate("receiver", "username firstName lastName avatar")
-    .populate("requestedItem", "title images pointValue")
-    .populate("offeredItem", "title images pointValue")
+    .populate("owner", "username firstName lastName avatar")
+    .populate("requesterItem", "title images pointValue")
+    .populate("ownerItem", "title images pointValue")
     .sort({ createdAt: -1 })
 }
 
 // Static method to get pending swaps for an item
 swapSchema.statics.getPendingSwapsForItem = function (itemId) {
   return this.find({
-    requestedItem: itemId,
+    requesterItem: itemId,
     status: "pending",
   })
     .populate("requester", "username firstName lastName avatar")
-    .populate("offeredItem", "title images pointValue")
+    .populate("ownerItem", "title images pointValue")
     .sort({ createdAt: -1 })
 }
 
 // Pre-save middleware to validate swap logic
 swapSchema.pre("save", function (next) {
   // Validate that direct swaps have offered items
-  if (this.type === "direct" && !this.offeredItem) {
+  if (this.type === "direct" && !this.ownerItem) {
     return next(new Error("Direct swaps must include an offered item"))
   }
 
@@ -258,7 +265,7 @@ swapSchema.pre("save", function (next) {
   }
 
   // Prevent self-swapping
-  if (this.requester.toString() === this.receiver.toString()) {
+  if (this.requester.toString() === this.owner.toString()) {
     return next(new Error("Cannot create swap with yourself"))
   }
 

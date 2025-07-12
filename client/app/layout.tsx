@@ -3,15 +3,14 @@ import type { Metadata } from "next"
 import { Inter } from "next/font/google"
 import "./globals.css"
 import { ThemeProvider } from "@/components/theme-provider"
-import { Toaster } from "@/components/ui/sonner"
 import { AuthProvider } from "@/contexts/AuthContext"
 import { SocketProvider } from "@/contexts/SocketContext"
 
 const inter = Inter({ subsets: ["latin"] })
 
 export const metadata: Metadata = {
-  title: "ReWear - Sustainable Fashion Swaps",
-  description: "Swap clothes and accessories sustainably with ReWear.",
+  title: "ReWear",
+  description: "Sustainable Fashion Swapping Platform",
 }
 
 export default function RootLayout({
@@ -23,12 +22,9 @@ export default function RootLayout({
     <html lang="en" suppressHydrationWarning>
       <body className={inter.className}>
         <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
-          <AuthProvider>
-            <SocketProvider>
-              {children}
-              <Toaster />
-            </SocketProvider>
-          </AuthProvider>
+          <SocketProvider>
+            <AuthProvider>{children}</AuthProvider>
+          </SocketProvider>
         </ThemeProvider>
       </body>
     </html>

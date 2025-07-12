@@ -29,7 +29,7 @@ yarn-error.log*
 .env
 
 # vercel
-.vercel/
+.vercel
 
 # typescript
 *.tsbuildinfo
@@ -39,12 +39,20 @@ next-env.d.ts
 client/node_modules
 client/.next/
 client/out/
+client/npm-debug.log*
+client/yarn-debug.log*
+client/yarn-error.log*
 client/.env*.local
-client/.vercel/
+client/.env
+client/.vercel
 client/*.tsbuildinfo
 client/next-env.d.ts
 
 # server-specific
 server/node_modules
-server/build/
+server/npm-debug.log*
+server/yarn-debug.log*
+server/yarn-error.log*
+server/.env*.local
 server/.env
+server/.vercel

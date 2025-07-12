@@ -4,29 +4,29 @@ import type React from "react"
 
 import { useState } from "react"
 import { useRouter } from "next/navigation"
-import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import Link from "next/link"
 import { useAuth } from "@/contexts/AuthContext"
-import { toast } from "sonner"
+import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from "@/components/ui/card"
+import { Label } from "@/components/ui/label"
+import { Input } from "@/components/ui/input"
+import { Button } from "@/components/ui/button"
+import Link from "next/link"
 
 export default function RegisterPage() {
   const [username, setUsername] = useState("")
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
+  const [error, setError] = useState("")
   const [loading, setLoading] = useState(false)
-  const router = useRouter()
   const { login } = useAuth()
-
-  const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL
+  const router = useRouter()
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    setError("")
     setLoading(true)
+
     try {
-      const response = await fetch(`${API_BASE_URL}/auth/register`, {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/auth/register`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -38,36 +38,36 @@ export default function RegisterPage() {
 
       if (response.ok) {
         login(data.user, data.token)
-        router.push("/dashboard") // Redirect to dashboard or home page after registration
+        // Redirect handled by AuthContext
       } else {
-        toast.error(data.message || "Registration failed. Please try again.")
+        setError(data.message || "Registration failed. Please try again.")
       }
-    } catch (error) {
-      console.error("Registration error:", error)
-      toast.error("An unexpected error occurred. Please try again.")
+    } catch (err) {
+      setError("An unexpected error occurred. Please try again later.")
+      console.error("Registration error:", err)
     } finally {
       setLoading(false)
     }
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-gray-100 px-4">
+    <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-green-50 to-blue-50 p-4">
       <Card className="w-full max-w-md">
-        <CardHeader className="space-y-1 text-center">
-          <CardTitle className="text-2xl font-bold">Register</CardTitle>
-          <CardDescription>Create your account to start swapping!</CardDescription>
+        <CardHeader className="text-center">
+          <CardTitle className="text-3xl font-bold text-gray-900">Register for ReWear</CardTitle>
+          <CardDescription className="text-gray-600">Create your account to start swapping clothes.</CardDescription>
         </CardHeader>
         <CardContent>
-          <form onSubmit={handleSubmit} className="grid gap-4">
+          <form onSubmit={handleSubmit} className="space-y-6">
             <div className="grid gap-2">
               <Label htmlFor="username">Username</Label>
               <Input
                 id="username"
                 type="text"
                 placeholder="john_doe"
+                required
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
-                required
               />
             </div>
             <div className="grid gap-2">
@@ -76,9 +76,9 @@ export default function RegisterPage() {
                 id="email"
                 type="email"
                 placeholder="m@example.com"
+                required
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                required
               />
             </div>
             <div className="grid gap-2">
@@ -86,22 +86,25 @@ export default function RegisterPage() {
               <Input
                 id="password"
                 type="password"
+                required
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                required
               />
             </div>
-            <Button type="submit" className="w-full" disabled={loading}>
+            {error && <p className="text-red-500 text-sm text-center">{error}</p>}
+            <Button type="submit" className="w-full bg-green-600 hover:bg-green-700" disabled={loading}>
               {loading ? "Registering..." : "Register"}
             </Button>
           </form>
-          <div className="mt-4 text-center text-sm">
+        </CardContent>
+        <CardFooter className="flex flex-col gap-4">
+          <div className="text-sm text-gray-600">
             Already have an account?{" "}
-            <Link href="/login" className="underline">
+            <Link href="/login" className="font-medium text-green-600 hover:underline">
               Login
             </Link>
           </div>
-        </CardContent>
+        </CardFooter>
       </Card>
     </div>
   )

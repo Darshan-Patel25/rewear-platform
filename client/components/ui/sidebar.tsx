@@ -1,88 +1,74 @@
 "use client"
 
-import * as React from "react"
-import { cva, type VariantProps } from "class-variance-authority"
-
+import type * as React from "react"
+import Link from "next/link"
+import { usePathname } from "next/navigation"
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { cn } from "@/lib/utils"
 
-const sidebarVariants = cva("flex h-full flex-col overflow-y-auto border-r bg-background p-4", {
-  variants: {
-    variant: {
-      default: "w-64",
-      collapsed: "w-16",
-    },
-  },
-  defaultVariants: {
-    variant: "default",
-  },
-})
-
-export interface SidebarProps extends React.HTMLAttributes<HTMLDivElement>, VariantProps<typeof sidebarVariants> {
-  isCollapsed?: boolean
+interface SidebarProps extends React.HTMLAttributes<HTMLDivElement> {
+  isCollapsed: boolean
+  links: {
+    title: string
+    label?: string
+    icon: React.ElementType
+    href: string
+  }[]
 }
 
-const Sidebar = React.forwardRef<HTMLDivElement, SidebarProps>(
-  ({ className, isCollapsed, children, ...props }, ref) => (
-    <aside
-      ref={ref}
-      className={cn(sidebarVariants({ variant: isCollapsed ? "collapsed" : "default" }), className)}
-      {...props}
+export function Sidebar({ className, isCollapsed, links }: SidebarProps) {
+  const pathname = usePathname()
+
+  return (
+    <div
+      data-collapsed={isCollapsed}
+      className={cn("group flex flex-col gap-4 py-2 data-[collapsed=true]:py-2", className)}
     >
-      {children}
-    </aside>
-  ),
-)
-Sidebar.displayName = "Sidebar"
-
-const SidebarHeader = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLDivElement>>(
-  ({ className, ...props }, ref) => (
-    <div ref={ref} className={cn("mb-4 flex items-center justify-between", className)} {...props} />
-  ),
-)
-SidebarHeader.displayName = "SidebarHeader"
-
-const SidebarTitle = React.forwardRef<HTMLHeadingElement, React.HTMLAttributes<HTMLHeadingElement>>(
-  ({ className, ...props }, ref) => <h3 ref={ref} className={cn("text-lg font-semibold", className)} {...props} />,
-)
-SidebarTitle.displayName = "SidebarTitle"
-
-const SidebarToggle = React.forwardRef<HTMLButtonElement, React.ButtonHTMLAttributes<HTMLButtonElement>>(
-  ({ className, ...props }, ref) => (
-    <button
-      ref={ref}
-      className={cn("rounded-md p-2 hover:bg-accent hover:text-accent-foreground", className)}
-      {...props}
-    />
-  ),
-)
-SidebarToggle.displayName = "SidebarToggle"
-
-const SidebarNav = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLDivElement>>(
-  ({ className, ...props }, ref) => <nav ref={ref} className={cn("flex-1 space-y-2", className)} {...props} />,
-)
-SidebarNav.displayName = "SidebarNav"
-
-const SidebarNavLink = React.forwardRef<
-  HTMLAnchorElement,
-  React.AnchorHTMLAttributes<HTMLAnchorElement> & {
-    active?: boolean
-  }
->(({ className, active, ...props }, ref) => (
-  <a
-    ref={ref}
-    className={cn(
-      "flex items-center gap-2 rounded-md px-3 py-2 text-sm font-medium hover:bg-accent hover:text-accent-foreground",
-      active && "bg-accent text-accent-foreground",
-      className,
-    )}
-    {...props}
-  />
-))
-SidebarNavLink.displayName = "SidebarNavLink"
-
-const SidebarFooter = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLDivElement>>(
-  ({ className, ...props }, ref) => <div ref={ref} className={cn("mt-auto border-t pt-4", className)} {...props} />,
-)
-SidebarFooter.displayName = "SidebarFooter"
-
-export { Sidebar, SidebarHeader, SidebarTitle, SidebarToggle, SidebarNav, SidebarNavLink, SidebarFooter }
+      <nav className="grid gap-1 px-2 group-[[data-collapsed=true]]:justify-center group-[[data-collapsed=true]]:px-2">
+        {links.map((link, index) =>
+          isCollapsed ? (
+            <TooltipProvider key={index}>
+              <Tooltip delayDuration={0}>
+                <TooltipTrigger asChild>
+                  <Link
+                    href={link.href}
+                    className={cn(
+                      "flex h-9 w-9 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:text-foreground",
+                      pathname === link.href && "bg-accent text-accent-foreground",
+                      "dark:hover:text-white dark:text-gray-400",
+                    )}
+                  >
+                    <link.icon className="h-5 w-5" />
+                    <span className="sr-only">{link.title}</span>
+                  </Link>
+                </TooltipTrigger>
+                <TooltipContent side="right" className="flex items-center gap-4">
+                  {link.title}
+                  {link.label && <span className="ml-auto text-muted-foreground">{link.label}</span>}
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          ) : (
+            <Link
+              key={index}
+              href={link.href}
+              className={cn(
+                "flex items-center gap-3 rounded-lg px-3 py-2 text-muted-foreground transition-all hover:text-foreground",
+                pathname === link.href && "bg-accent text-accent-foreground",
+                "dark:hover:text-white dark:text-gray-400",
+              )}
+            >
+              <link.icon className="h-5 w-5" />
+              {link.title}
+              {link.label && (
+                <span className={cn("ml-auto", pathname === link.href && "text-background dark:text-white")}>
+                  {link.label}
+                </span>
+              )}
+            </Link>
+          ),
+        )}
+      </nav>
+    </div>
+  )
+}

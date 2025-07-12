@@ -1,54 +1,34 @@
 const mongoose = require("mongoose")
 const bcrypt = require("bcryptjs")
+const jwt = require("jsonwebtoken")
 
 const UserSchema = new mongoose.Schema({
   username: {
     type: String,
-    required: true,
+    required: [true, "Please add a username"],
     unique: true,
     trim: true,
+    maxlength: [50, "Username can not be more than 50 characters"],
   },
   email: {
     type: String,
-    required: true,
+    required: [true, "Please add an email"],
     unique: true,
-    trim: true,
-    lowercase: true,
-    match: [/.+@.+\..+/, "Please fill a valid email address"],
+    match: [
+      /^(([^<>()[\]\\.,;:\s@"]+(\.[^<>()[\]\\.,;:\s@"]+)*)|(".+"))@((\[[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\])|(([a-zA-Z\-0-9]+\.)+[a-zA-Z]{2,}))$/,
+      "Please add a valid email",
+    ],
   },
   password: {
     type: String,
-    required: true,
+    required: [true, "Please add a password"],
     minlength: 6,
+    select: false, // Don't return password in queries
   },
-  profilePicture: {
+  role: {
     type: String,
-    default: "/placeholder-user.png", // Default placeholder image
-  },
-  bio: {
-    type: String,
-    maxlength: 500,
-    default: "",
-  },
-  location: {
-    type: String,
-    default: "",
-  },
-  items: [
-    {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "Item",
-    },
-  ],
-  swaps: [
-    {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "Swap",
-    },
-  ],
-  isAdmin: {
-    type: Boolean,
-    default: false,
+    enum: ["user", "admin"],
+    default: "user",
   },
   createdAt: {
     type: Date,
@@ -56,17 +36,23 @@ const UserSchema = new mongoose.Schema({
   },
 })
 
-// Hash password before saving
+// Encrypt password using bcrypt
 UserSchema.pre("save", async function (next) {
   if (!this.isModified("password")) {
-    return next()
+    next()
   }
   const salt = await bcrypt.genSalt(10)
   this.password = await bcrypt.hash(this.password, salt)
-  next()
 })
 
-// Method to compare passwords
+// Sign JWT and return
+UserSchema.methods.getSignedJwtToken = function () {
+  return jwt.sign({ id: this._id, role: this.role }, process.env.JWT_SECRET, {
+    expiresIn: "1h", // Token expires in 1 hour
+  })
+}
+
+// Match user entered password to hashed password in database
 UserSchema.methods.matchPassword = async function (enteredPassword) {
   return await bcrypt.compare(enteredPassword, this.password)
 }

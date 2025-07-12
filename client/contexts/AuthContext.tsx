@@ -1,76 +1,55 @@
 "use client"
 
-import type React from "react"
-import { createContext, useState, useContext, useEffect, useCallback } from "react"
-import { toast } from "sonner"
+import { createContext, useState, useContext, useEffect, type ReactNode } from "react"
+import { useRouter } from "next/navigation"
 
 interface AuthContextType {
-  user: any | null
+  user: any // Replace 'any' with your User type
   token: string | null
-  login: (userData: any, authToken: string) => void
+  login: (userData: any, userToken: string) => void
   logout: () => void
-  checkAuth: () => Promise<void>
-  loading: boolean
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
 
-export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [user, setUser] = useState<any | null>(null)
+export const AuthProvider = ({ children }: { children: ReactNode }) => {
+  const [user, setUser] = useState<any>(null)
   const [token, setToken] = useState<string | null>(null)
-  const [loading, setLoading] = useState(true)
-
-  const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL
-
-  const login = useCallback((userData: any, authToken: string) => {
-    localStorage.setItem("token", authToken)
-    setUser(userData)
-    setToken(authToken)
-    toast.success("Logged in successfully!")
-  }, [])
-
-  const logout = useCallback(() => {
-    localStorage.removeItem("token")
-    setUser(null)
-    setToken(null)
-    toast.info("Logged out.")
-  }, [])
-
-  const checkAuth = useCallback(async () => {
-    setLoading(true)
-    const storedToken = localStorage.getItem("token")
-    if (storedToken) {
-      try {
-        const response = await fetch(`${API_BASE_URL}/auth/me`, {
-          headers: {
-            Authorization: `Bearer ${storedToken}`,
-          },
-        })
-        if (response.ok) {
-          const data = await response.json()
-          setUser(data.user)
-          setToken(storedToken)
-        } else {
-          logout()
-        }
-      } catch (error) {
-        console.error("Failed to check auth:", error)
-        logout()
-      } finally {
-        setLoading(false)
-      }
-    } else {
-      setLoading(false)
-    }
-  }, [API_BASE_URL, logout])
+  const router = useRouter()
 
   useEffect(() => {
-    checkAuth()
-  }, [checkAuth])
+    // Attempt to load user and token from localStorage on mount
+    const storedUser = localStorage.getItem("user")
+    const storedToken = localStorage.getItem("token")
 
-  return (
-    <AuthContext.Provider value={{ user, token, login, logout, checkAuth, loading }}>{children}</AuthContext.Provider>
-  )
+    if (storedUser && storedToken) {
+      try {
+        setUser(JSON.parse(storedUser))
+        setToken(storedToken)
+      } catch (error) {
+        console.error("Failed to parse stored user data:", error)
+        logout() // Clear invalid data
+      }
+    }
+  }, [])
+
+  const login = (userData: any, userToken: string) => {
+    setUser(userData)
+    setToken(userToken)
+    localStorage.setItem("user", JSON.stringify(userData))
+    localStorage.setItem("token", userToken)
+    router.push("/dashboard") // Redirect to dashboard or home after login
+  }
+
+  const logout = () => {
+    setUser(null)
+    setToken(null)
+    localStorage.removeItem("user")
+    localStorage.removeItem("token")
+    router.push("/login") // Redirect to login page after logout
+  }
+
+  return <AuthContext.Provider value={{ user, token, login, logout }}>{children}</AuthContext.Provider>
 }
 
 export const useAuth = () => {

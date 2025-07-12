@@ -10,14 +10,13 @@ const itemSchema = new mongoose.Schema(
     },
     description: {
       type: String,
-      required: [true, "Item description is required"],
-      trim: true,
-      maxlength: [1000, "Description cannot exceed 1000 characters"],
+      required: [true, "Please add a description"],
+      maxlength: [500, "Description can not be more than 500 characters"],
     },
     category: {
       type: String,
-      required: [true, "Category is required"],
-      enum: ["Tops", "Bottoms", "Dresses", "Outerwear", "Shoes", "Accessories", "Other"],
+      required: [true, "Please specify a category"],
+      enum: ["Tops", "Bottoms", "Dresses", "Outerwear", "Footwear", "Accessories", "Other"],
     },
     subcategory: {
       type: String,
@@ -30,13 +29,12 @@ const itemSchema = new mongoose.Schema(
     },
     size: {
       type: String,
-      required: [true, "Size is required"],
-      trim: true,
+      required: [true, "Please specify a size"],
       enum: ["XS", "S", "M", "L", "XL", "XXL", "One Size"],
     },
     condition: {
       type: String,
-      required: [true, "Condition is required"],
+      required: [true, "Please specify the condition"],
       enum: ["New with tags", "Like new", "Gently used", "Used", "Fair"],
       lowercase: true,
     },
@@ -48,17 +46,10 @@ const itemSchema = new mongoose.Schema(
       type: String,
       trim: true,
     },
-    images: [
-      {
-        url: {
-          type: String,
-          required: true,
-          default: "/placeholder.png", // Default placeholder image
-        },
-        publicId: String, // For Cloudinary
-        alt: String,
-      },
-    ],
+    images: {
+      type: [String], // Array of image URLs
+      default: [],
+    },
     pointValue: {
       type: Number,
       required: [true, "Point value is required"],

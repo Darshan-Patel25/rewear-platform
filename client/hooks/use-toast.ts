@@ -2,16 +2,16 @@
 
 import * as React from "react"
 
-import type { ToastProps } from "@/components/ui/toast"
+import type { ToastActionElement, ToastProps } from "@/components/ui/toast"
 
 const TOAST_LIMIT = 1
-const TOAST_REMOVE_DELAY = 1000000
+const TOAST_REMOVE_DELAY = 10000
 
 type ToasterToast = ToastProps & {
   id: string
   title?: React.ReactNode
   description?: React.ReactNode
-  action?: React.ReactNode
+  action?: ToastActionElement
 }
 
 const actionTypes = {
@@ -28,29 +28,27 @@ function genId() {
   return count.toString()
 }
 
-type ActionType = typeof actionTypes
-
-type State = {
-  toasts: ToasterToast[]
-}
-
 type Action =
   | {
-      type: ActionType["ADD_TOAST"]
+      type: typeof actionTypes.ADD_TOAST
       toast: ToasterToast
     }
   | {
-      type: ActionType["UPDATE_TOAST"]
+      type: typeof actionTypes.UPDATE_TOAST
       toast: Partial<ToasterToast>
     }
   | {
-      type: ActionType["DISMISS_TOAST"]
+      type: typeof actionTypes.DISMISS_TOAST
       toastId?: ToasterToast["id"]
     }
   | {
-      type: ActionType["REMOVE_TOAST"]
+      type: typeof actionTypes.REMOVE_TOAST
       toastId?: ToasterToast["id"]
     }
+
+interface State {
+  toasts: ToasterToast[]
+}
 
 const toastTimeouts = new Map<string, ReturnType<typeof setTimeout>>()
 
@@ -87,7 +85,8 @@ export const reducer = (state: State, action: Action): State => {
     case actionTypes.DISMISS_TOAST: {
       const { toastId } = action
 
-      // ! Side effects ! - This is not beautiful, but it's the easiest way to get the dismiss effect to work as it needs to call an external action
+      // ! Side effects ! - This means all toasts will be dismissed.
+      // If you want to dismiss a specific toast, pass the toastId
       if (toastId) {
         addToRemoveQueue(toastId)
       } else {
@@ -131,17 +130,39 @@ function dispatch(action: Action) {
   setState(reducer(state, action))
 }
 
-type Toast = Omit<ToasterToast, "id">
+export function useToast() {
+  const [activeToasts, setActiveToasts] = React.useState(state.toasts)
 
-function toast({ ...props }: Toast) {
+  React.useEffect(() => {
+    const listener = (newState: State) => {
+      setActiveToasts(newState.toasts)
+    }
+
+    listeners.push(listener)
+    return () => {
+      const index = listeners.indexOf(listener)
+      if (index > -1) {
+        listeners.splice(index, 1)
+      }
+    }
+  }, [])
+
+  return {
+    toasts: activeToasts,
+    toast,
+  }
+}
+
+type Toast = ({ ...props }: Omit<ToasterToast, "id">) => {
+  id: string
+  dismiss: () => void
+  update: (props: Partial<ToasterToast>) => void
+}
+
+export const toast: Toast = ({ ...props }) => {
   const id = genId()
 
-  const update = (props: ToasterToast) =>
-    dispatch({
-      type: actionTypes.UPDATE_TOAST,
-      toast: { ...props, id },
-    })
-
+  const update = (props: Partial<ToasterToast>) => dispatch({ type: actionTypes.UPDATE_TOAST, toast: { ...props, id } })
   const dismiss = () => dispatch({ type: actionTypes.DISMISS_TOAST, toastId: id })
 
   dispatch({
@@ -162,29 +183,3 @@ function toast({ ...props }: Toast) {
     update,
   }
 }
-
-function useToast() {
-  const [state, setState] = React.useState<State>(initialState)
-
-  React.useEffect(() => {
-    listeners.push(setState)
-    return () => {
-      const index = listeners.indexOf(setState)
-      if (index > -1) {
-        listeners.splice(index, 1)
-      }
-    }
-  }, [state])
-
-  return {
-    ...state,
-    toast,
-    dismiss: React.useCallback((toastId?: string) => dispatch({ type: actionTypes.DISMISS_TOAST, toastId }), []),
-  }
-}
-
-const initialState: State = {
-  toasts: [],
-}
-
-export { useToast, toast }

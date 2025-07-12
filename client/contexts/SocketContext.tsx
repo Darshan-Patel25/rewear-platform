@@ -1,88 +1,42 @@
 "use client"
 
-import type React from "react"
-import { createContext, useContext, useEffect, useState, useCallback } from "react"
-import { io, type Socket } from "socket.io-client"
-import { useAuth } from "./AuthContext"
-import { toast } from "sonner"
+import { createContext, useContext, useEffect, useState, type ReactNode } from "react"
+import io, { type Socket } from "socket.io-client"
 
 interface SocketContextType {
   socket: Socket | null
-  isConnected: boolean
 }
 
 const SocketContext = createContext<SocketContextType | undefined>(undefined)
 
-export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const { user, token } = useAuth()
+export const SocketProvider = ({ children }: { children: ReactNode }) => {
   const [socket, setSocket] = useState<Socket | null>(null)
-  const [isConnected, setIsConnected] = useState(false)
-
-  const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL?.replace("/api", "") || "http://localhost:5000"
-
-  const connectSocket = useCallback(() => {
-    if (user && token && !socket) {
-      const newSocket = io(API_BASE_URL, {
-        auth: { token },
-        transports: ["websocket"],
-      })
-
-      newSocket.on("connect", () => {
-        setIsConnected(true)
-        console.log("Socket connected:", newSocket.id)
-      })
-
-      newSocket.on("disconnect", () => {
-        setIsConnected(false)
-        console.log("Socket disconnected")
-      })
-
-      newSocket.on("connect_error", (err) => {
-        console.error("Socket connection error:", err.message)
-        toast.error(`Socket connection error: ${err.message}`)
-      })
-
-      newSocket.on("newSwapRequest", (data) => {
-        toast.info(`New swap request from ${data.requesterName} for your item: ${data.itemName}`)
-      })
-
-      newSocket.on("swapAccepted", (data) => {
-        toast.success(`Your swap request for ${data.itemName} was accepted by ${data.accepterName}!`)
-      })
-
-      newSocket.on("swapDeclined", (data) => {
-        toast.warning(`Your swap request for ${data.itemName} was declined by ${data.declinerName}.`)
-      })
-
-      newSocket.on("swapCompleted", (data) => {
-        toast.success(`Swap for ${data.itemName} completed!`)
-      })
-
-      setSocket(newSocket)
-    }
-  }, [user, token, socket, API_BASE_URL])
-
-  const disconnectSocket = useCallback(() => {
-    if (socket) {
-      socket.disconnect()
-      setSocket(null)
-      setIsConnected(false)
-    }
-  }, [socket])
 
   useEffect(() => {
-    if (user && token) {
-      connectSocket()
-    } else {
-      disconnectSocket()
-    }
+    const newSocket = io(process.env.NEXT_PUBLIC_SOCKET_URL || "http://localhost:5000", {
+      transports: ["websocket"],
+    })
+
+    newSocket.on("connect", () => {
+      console.log("Socket connected:", newSocket.id)
+    })
+
+    newSocket.on("disconnect", () => {
+      console.log("Socket disconnected")
+    })
+
+    newSocket.on("connect_error", (err) => {
+      console.error("Socket connection error:", err.message)
+    })
+
+    setSocket(newSocket)
 
     return () => {
-      disconnectSocket()
+      newSocket.disconnect()
     }
-  }, [user, token, connectSocket, disconnectSocket])
+  }, [])
 
-  return <SocketContext.Provider value={{ socket, isConnected }}>{children}</SocketContext.Provider>
+  return <SocketContext.Provider value={{ socket }}>{children}</SocketContext.Provider>
 }
 
 export const useSocket = () => {
