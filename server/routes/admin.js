@@ -3,12 +3,12 @@ const { body, validationResult, query } = require("express-validator")
 const User = require("../models/User")
 const Item = require("../models/Item")
 const Swap = require("../models/Swap")
-const { auth, adminAuth } = require("../middleware/auth")
+const { protect, adminProtect } = require("../middleware/auth")
 
 const router = express.Router()
 
 // Apply auth and adminAuth to all routes
-router.use(auth, adminAuth)
+router.use(protect, adminProtect)
 
 // @route   GET /api/admin/stats
 // @desc    Get admin dashboard statistics
@@ -558,5 +558,48 @@ router.get(
     }
   },
 )
+
+// @route   DELETE /api/admin/users/:id
+// @desc    Delete a user (Admin only)
+// @access  Private/Admin
+router.delete("/users/:id", protect, adminProtect, async (req, res) => {
+  try {
+    const user = await User.findById(req.params.id)
+
+    if (!user) {
+      return res.status(404).json({ message: "User not found" })
+    }
+
+    // Prevent admin from deleting themselves
+    if (user._id.toString() === req.user.id) {
+      return res.status(400).json({ message: "Cannot delete your own admin account" })
+    }
+
+    await User.deleteOne({ _id: req.params.id })
+    res.json({ message: "User removed successfully" })
+  } catch (err) {
+    console.error(err.message)
+    res.status(500).send("Server error")
+  }
+})
+
+// @route   DELETE /api/admin/swaps/:id
+// @desc    Delete a swap (Admin only)
+// @access  Private/Admin
+router.delete("/swaps/:id", protect, adminProtect, async (req, res) => {
+  try {
+    const swap = await Swap.findById(req.params.id)
+
+    if (!swap) {
+      return res.status(404).json({ message: "Swap not found" })
+    }
+
+    await Swap.deleteOne({ _id: req.params.id })
+    res.json({ message: "Swap removed successfully" })
+  } catch (err) {
+    console.error(err.message)
+    res.status(500).send("Server error")
+  }
+})
 
 module.exports = router

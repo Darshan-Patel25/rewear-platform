@@ -3,7 +3,7 @@ const { body, validationResult, query } = require("express-validator")
 const Swap = require("../models/Swap")
 const Item = require("../models/Item")
 const User = require("../models/User")
-const { auth } = require("../middleware/auth")
+const { auth, protect } = require("../middleware/auth")
 
 const router = express.Router()
 
@@ -66,6 +66,122 @@ router.get(
     }
   },
 )
+
+// @route   POST /api/swaps/request
+// @desc    Initiate a new swap request
+// @access  Private
+router.post(
+  "/request",
+  protect,
+  [
+    body("receiverId", "Receiver ID is required").notEmpty(),
+    body("initiatorItemId", "Initiator item ID is required").notEmpty(),
+    body("receiverItemId", "Receiver item ID is required").notEmpty(),
+    body("message", "Message is required").notEmpty().isLength({ max: 500 }),
+  ],
+  async (req, res) => {
+    const errors = validationResult(req)
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() })
+    }
+
+    const { receiverId, initiatorItemId, receiverItemId, message } = req.body
+    const initiatorId = req.user.id
+
+    try {
+      // Ensure initiator and receiver are different users
+      if (initiatorId === receiverId) {
+        return res.status(400).json({ message: "Cannot swap with yourself" })
+      }
+
+      // Check if items exist and belong to the correct users
+      const initiatorItem = await Item.findById(initiatorItemId)
+      const receiverItem = await Item.findById(receiverItemId)
+
+      if (!initiatorItem || !receiverItem) {
+        return res.status(404).json({ message: "One or both items not found" })
+      }
+
+      if (initiatorItem.owner.toString() !== initiatorId) {
+        return res.status(401).json({ message: "Initiator does not own the provided initiator item" })
+      }
+      if (receiverItem.owner.toString() !== receiverId) {
+        return res.status(401).json({ message: "Receiver does not own the provided receiver item" })
+      }
+
+      // Check if items are available for swap
+      if (!initiatorItem.isAvailable || !receiverItem.isAvailable) {
+        return res.status(400).json({ message: "One or both items are not available for swap" })
+      }
+
+      // Check for existing pending swap between these items/users
+      const existingSwap = await Swap.findOne({
+        $or: [
+          {
+            initiator: initiatorId,
+            receiver: receiverId,
+            initiatorItem: initiatorItemId,
+            receiverItem: receiverItemId,
+            status: "pending",
+          },
+          {
+            initiator: receiverId,
+            receiver: initiatorId,
+            initiatorItem: receiverItemId,
+            receiverItem: initiatorItemId,
+            status: "pending",
+          },
+        ],
+      })
+
+      if (existingSwap) {
+        return res.status(400).json({ message: "A pending swap request already exists for these items." })
+      }
+
+      const newSwap = new Swap({
+        initiator: initiatorId,
+        receiver: receiverId,
+        initiatorItem: initiatorItemId,
+        receiverItem: receiverItemId,
+        message,
+        status: "pending",
+      })
+
+      const swap = await newSwap.save()
+
+      // Add swap to users' initiated/received lists
+      await User.findByIdAndUpdate(initiatorId, { $push: { swapsInitiated: swap._id } })
+      await User.findByIdAndUpdate(receiverId, { $push: { swapsReceived: swap._id } })
+
+      res.status(201).json({ message: "Swap request sent successfully", swap })
+    } catch (err) {
+      console.error(err.message)
+      res.status(500).send("Server error")
+    }
+  },
+)
+
+// @route   GET /api/swaps/my-swaps
+// @desc    Get all swaps involving the authenticated user
+// @access  Private
+router.get("/my-swaps", protect, async (req, res) => {
+  try {
+    const userId = req.user.id
+    const swaps = await Swap.find({
+      $or: [{ initiator: userId }, { receiver: userId }],
+    })
+      .populate("initiator", "username profilePicture")
+      .populate("receiver", "username profilePicture")
+      .populate("initiatorItem", "name images")
+      .populate("receiverItem", "name images")
+      .sort({ createdAt: -1 })
+
+    res.json(swaps)
+  } catch (err) {
+    console.error(err.message)
+    res.status(500).send("Server error")
+  }
+})
 
 // @route   POST /api/swaps
 // @desc    Create new swap request
@@ -197,6 +313,121 @@ router.post(
     }
   },
 )
+
+// @route   PUT /api/swaps/:id/status
+// @desc    Update swap status (accept, reject, complete, cancel)
+// @access  Private (initiator or receiver)
+router.put(
+  "/:id/status",
+  protect,
+  [body("status", "Invalid status").isIn(["accepted", "rejected", "completed", "cancelled"])],
+  async (req, res) => {
+    const errors = validationResult(req)
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() })
+    }
+
+    const { status } = req.body
+    const swapId = req.params.id
+    const userId = req.user.id
+
+    try {
+      const swap = await Swap.findById(swapId)
+
+      if (!swap) {
+        return res.status(404).json({ message: "Swap request not found" })
+      }
+
+      // Check if the user is either the initiator or the receiver
+      const isInitiator = swap.initiator.toString() === userId
+      const isReceiver = swap.receiver.toString() === userId
+
+      if (!isInitiator && !isReceiver) {
+        return res.status(401).json({ message: "Not authorized to update this swap" })
+      }
+
+      // Logic for status transitions
+      if (status === "accepted") {
+        if (!isReceiver || swap.status !== "pending") {
+          return res.status(400).json({ message: "Only the receiver can accept a pending swap" })
+        }
+        swap.status = "accepted"
+      } else if (status === "rejected") {
+        if (!isReceiver || swap.status !== "pending") {
+          return res.status(400).json({ message: "Only the receiver can reject a pending swap" })
+        }
+        swap.status = "rejected"
+      } else if (status === "completed") {
+        if (swap.status !== "accepted") {
+          return res.status(400).json({ message: "Swap must be accepted before it can be completed" })
+        }
+        // Both parties can mark as completed, but usually, one confirms after physical exchange
+        // For simplicity, let's allow either to mark as completed if accepted
+        swap.status = "completed"
+
+        // Mark items as unavailable
+        await Item.findByIdAndUpdate(swap.initiatorItem, { isAvailable: false })
+        await Item.findByIdAndUpdate(swap.receiverItem, { isAvailable: false })
+
+        // Update user points (example: 50 points per completed swap)
+        const initiatorUser = await User.findById(swap.initiator)
+        const receiverUser = await User.findById(swap.receiver)
+        if (initiatorUser) {
+          initiatorUser.points += 50
+          await initiatorUser.save()
+        }
+        if (receiverUser) {
+          receiverUser.points += 50
+          await receiverUser.save()
+        }
+      } else if (status === "cancelled") {
+        if (swap.status === "completed") {
+          return res.status(400).json({ message: "Cannot cancel a completed swap" })
+        }
+        // Either party can cancel if not completed
+        swap.status = "cancelled"
+        // If items were marked unavailable (e.g., after acceptance), make them available again
+        await Item.findByIdAndUpdate(swap.initiatorItem, { isAvailable: true })
+        await Item.findByIdAndUpdate(swap.receiverItem, { isAvailable: true })
+      } else {
+        return res.status(400).json({ message: "Invalid status update" })
+      }
+
+      await swap.save()
+      res.json({ message: `Swap status updated to ${swap.status}`, swap })
+    } catch (err) {
+      console.error(err.message)
+      res.status(500).send("Server error")
+    }
+  },
+)
+
+// @route   GET /api/swaps/:id
+// @desc    Get a single swap request by ID
+// @access  Private (initiator or receiver)
+router.get("/:id", protect, async (req, res) => {
+  try {
+    const swap = await Swap.findById(req.params.id)
+      .populate("initiator", "username profilePicture")
+      .populate("receiver", "username profilePicture")
+      .populate("initiatorItem", "name images")
+      .populate("receiverItem", "name images")
+
+    if (!swap) {
+      return res.status(404).json({ message: "Swap request not found" })
+    }
+
+    // Ensure only involved parties can view the swap details
+    if (swap.initiator.toString() !== req.user.id && swap.receiver.toString() !== req.user.id) {
+      return res.status(401).json({ message: "Not authorized to view this swap" })
+    }
+
+    res.json(swap)
+  } catch (err) {
+    console.error(err.message)
+    res.status(500).send("Server error")
+  }
+})
 
 // @route   PUT /api/swaps/:id/respond
 // @desc    Respond to swap request (accept/reject)

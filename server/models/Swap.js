@@ -7,30 +7,25 @@ const swapSchema = new mongoose.Schema(
       enum: ["direct", "points"],
       required: true,
     },
-    requester: {
+    initiator: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
       required: true,
     },
-    owner: {
+    receiver: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
       required: true,
     },
-    requestedItem: {
+    initiatorItem: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Item",
       required: true,
     },
-    offeredItem: {
+    receiverItem: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Item",
-      required: false, // Only for direct swaps
-    },
-    pointsOffered: {
-      type: Number,
-      required: false, // Only for point-based swaps
-      min: [1, "Points offered must be at least 1"],
+      required: true,
     },
     status: {
       type: String,
@@ -68,14 +63,14 @@ const swapSchema = new mongoose.Schema(
         type: String,
         enum: ["pickup", "shipping", "meetup"],
       },
-      requesterAddress: {
+      initiatorAddress: {
         street: String,
         city: String,
         state: String,
         zipCode: String,
         country: String,
       },
-      ownerAddress: {
+      receiverAddress: {
         street: String,
         city: String,
         state: String,
@@ -83,12 +78,12 @@ const swapSchema = new mongoose.Schema(
         country: String,
       },
       trackingNumbers: {
-        requesterToOwner: String,
-        ownerToRequester: String,
+        initiatorToReceiver: String,
+        receiverToInitiator: String,
       },
       shippingCost: {
-        requesterPays: Number,
-        ownerPays: Number,
+        initiatorPays: Number,
+        receiverPays: Number,
       },
     },
     timeline: [
@@ -102,7 +97,7 @@ const swapSchema = new mongoose.Schema(
       },
     ],
     rating: {
-      requesterRating: {
+      initiatorRating: {
         score: {
           type: Number,
           min: 1,
@@ -111,7 +106,7 @@ const swapSchema = new mongoose.Schema(
         comment: String,
         timestamp: Date,
       },
-      ownerRating: {
+      receiverRating: {
         score: {
           type: Number,
           min: 1,
@@ -129,6 +124,14 @@ const swapSchema = new mongoose.Schema(
       },
     },
     adminNotes: String,
+    createdAt: {
+      type: Date,
+      default: Date.now,
+    },
+    updatedAt: {
+      type: Date,
+      default: Date.now,
+    },
   },
   {
     timestamps: true,
@@ -136,16 +139,16 @@ const swapSchema = new mongoose.Schema(
 )
 
 // Indexes for better query performance
-swapSchema.index({ requester: 1, status: 1 })
-swapSchema.index({ owner: 1, status: 1 })
-swapSchema.index({ requestedItem: 1 })
-swapSchema.index({ offeredItem: 1 })
+swapSchema.index({ initiator: 1, status: 1 })
+swapSchema.index({ receiver: 1, status: 1 })
+swapSchema.index({ initiatorItem: 1 })
+swapSchema.index({ receiverItem: 1 })
 swapSchema.index({ status: 1, createdAt: -1 })
 swapSchema.index({ expiresAt: 1 })
 
 // Virtual for swap participants
 swapSchema.virtual("participants").get(function () {
-  return [this.requester, this.owner]
+  return [this.initiator, this.receiver]
 })
 
 // Method to add message to conversation
@@ -175,15 +178,15 @@ swapSchema.methods.getUnreadCount = function (userId) {
 
 // Method to check if user is participant
 swapSchema.methods.isParticipant = function (userId) {
-  return this.requester.toString() === userId.toString() || this.owner.toString() === userId.toString()
+  return this.initiator.toString() === userId.toString() || this.receiver.toString() === userId.toString()
 }
 
 // Method to get other participant
 swapSchema.methods.getOtherParticipant = function (userId) {
-  if (this.requester.toString() === userId.toString()) {
-    return this.owner
-  } else if (this.owner.toString() === userId.toString()) {
-    return this.requester
+  if (this.initiator.toString() === userId.toString()) {
+    return this.receiver
+  } else if (this.receiver.toString() === userId.toString()) {
+    return this.initiator
   }
   return null
 }
@@ -216,7 +219,7 @@ swapSchema.methods.getSwapValue = function () {
 // Static method to get user's swaps
 swapSchema.statics.getUserSwaps = function (userId, status = null) {
   const query = {
-    $or: [{ requester: userId }, { owner: userId }],
+    $or: [{ initiator: userId }, { receiver: userId }],
   }
 
   if (status) {
@@ -224,29 +227,29 @@ swapSchema.statics.getUserSwaps = function (userId, status = null) {
   }
 
   return this.find(query)
-    .populate("requester", "username firstName lastName avatar")
-    .populate("owner", "username firstName lastName avatar")
-    .populate("requestedItem", "title images pointValue")
-    .populate("offeredItem", "title images pointValue")
+    .populate("initiator", "username firstName lastName avatar")
+    .populate("receiver", "username firstName lastName avatar")
+    .populate("initiatorItem", "title images pointValue")
+    .populate("receiverItem", "title images pointValue")
     .sort({ createdAt: -1 })
 }
 
 // Static method to get pending swaps for an item
 swapSchema.statics.getPendingSwapsForItem = function (itemId) {
   return this.find({
-    requestedItem: itemId,
+    initiatorItem: itemId,
     status: "pending",
   })
-    .populate("requester", "username firstName lastName avatar")
-    .populate("offeredItem", "title images pointValue")
+    .populate("initiator", "username firstName lastName avatar")
+    .populate("receiverItem", "title images pointValue")
     .sort({ createdAt: -1 })
 }
 
 // Pre-save middleware to validate swap logic
 swapSchema.pre("save", function (next) {
   // Validate that direct swaps have offered items
-  if (this.type === "direct" && !this.offeredItem) {
-    return next(new Error("Direct swaps must include an offered item"))
+  if (this.type === "direct" && !this.receiverItem) {
+    return next(new Error("Direct swaps must include a receiver item"))
   }
 
   // Validate that point swaps have points offered
@@ -255,10 +258,12 @@ swapSchema.pre("save", function (next) {
   }
 
   // Prevent self-swapping
-  if (this.requester.toString() === this.owner.toString()) {
+  if (this.initiator.toString() === this.receiver.toString()) {
     return next(new Error("Cannot create swap with yourself"))
   }
 
+  // Update `updatedAt` field on save
+  this.updatedAt = Date.now()
   next()
 })
 

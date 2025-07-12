@@ -17,8 +17,7 @@ const itemSchema = new mongoose.Schema(
     category: {
       type: String,
       required: [true, "Category is required"],
-      enum: ["tops", "bottoms", "dresses", "outerwear", "shoes", "accessories"],
-      lowercase: true,
+      enum: ["Tops", "Bottoms", "Dresses", "Outerwear", "Footwear", "Accessories", "Other"],
     },
     subcategory: {
       type: String,
@@ -33,11 +32,12 @@ const itemSchema = new mongoose.Schema(
       type: String,
       required: [true, "Size is required"],
       trim: true,
+      enum: ["XS", "S", "M", "L", "XL", "XXL", "One Size"],
     },
     condition: {
       type: String,
       required: [true, "Condition is required"],
-      enum: ["new", "like-new", "good", "fair"],
+      enum: ["New with tags", "Like new", "Gently used", "Used", "Fair"],
       lowercase: true,
     },
     color: {
@@ -136,6 +136,10 @@ const itemSchema = new mongoose.Schema(
     featuredUntil: Date,
     adminNotes: String,
     rejectionReason: String,
+    isAvailable: {
+      type: Boolean,
+      default: true,
+    },
   },
   {
     timestamps: true,
@@ -188,10 +192,11 @@ itemSchema.methods.canEdit = function (userId) {
 // Method to calculate condition-based point multiplier
 itemSchema.methods.getConditionMultiplier = function () {
   const multipliers = {
-    new: 1.0,
-    "like-new": 0.9,
-    good: 0.8,
-    fair: 0.7,
+    "new with tags": 1.0,
+    "like new": 0.9,
+    "gently used": 0.8,
+    used: 0.7,
+    fair: 0.6,
   }
   return multipliers[this.condition] || 0.8
 }
@@ -200,10 +205,11 @@ itemSchema.methods.getConditionMultiplier = function () {
 itemSchema.pre("save", function (next) {
   if (this.isModified("pointValue") || this.isModified("condition")) {
     const maxPoints = {
-      new: 500,
-      "like-new": 400,
-      good: 300,
-      fair: 200,
+      "new with tags": 500,
+      "like new": 400,
+      "gently used": 300,
+      used: 200,
+      fair: 100,
     }
 
     if (this.pointValue > maxPoints[this.condition]) {

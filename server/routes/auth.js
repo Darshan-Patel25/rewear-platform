@@ -1,68 +1,40 @@
 const express = require("express")
+const { body, validationResult } = require("express-validator")
 const bcrypt = require("bcryptjs")
 const jwt = require("jsonwebtoken")
-const { body, validationResult } = require("express-validator")
 const User = require("../models/User")
-const { auth, sensitiveOpLimit } = require("../middleware/auth")
+const { protect } = require("../middleware/auth")
 
 const router = express.Router()
 
-// Generate JWT token
-const generateToken = (userId) => {
-  return jwt.sign({ userId }, process.env.JWT_SECRET, { expiresIn: "7d" })
-}
-
 // @route   POST /api/auth/register
-// @desc    Register a new user
+// @desc    Register new user
 // @access  Public
 router.post(
   "/register",
   [
-    body("username")
-      .isLength({ min: 3, max: 30 })
-      .withMessage("Username must be between 3 and 30 characters")
-      .matches(/^[a-zA-Z0-9_]+$/)
-      .withMessage("Username can only contain letters, numbers, and underscores"),
-    body("email").isEmail().normalizeEmail().withMessage("Please provide a valid email"),
-    body("password").isLength({ min: 6 }).withMessage("Password must be at least 6 characters long"),
-    body("firstName")
-      .trim()
-      .isLength({ min: 1, max: 50 })
-      .withMessage("First name is required and cannot exceed 50 characters"),
-    body("lastName")
-      .trim()
-      .isLength({ min: 1, max: 50 })
-      .withMessage("Last name is required and cannot exceed 50 characters"),
+    body("username", "Username is required").notEmpty(),
+    body("email", "Please include a valid email").isEmail(),
+    body("password", "Password must be at least 6 characters").isLength({ min: 6 }),
+    body("firstName", "First name is required").notEmpty(),
+    body("lastName", "Last name is required").notEmpty(),
   ],
   async (req, res) => {
+    const errors = validationResult(req)
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() })
+    }
+
+    const { username, email, password, firstName, lastName } = req.body
+
     try {
-      // Check for validation errors
-      const errors = validationResult(req)
-      if (!errors.isEmpty()) {
-        return res.status(400).json({
-          message: "Validation failed",
-          errors: errors.array(),
-        })
+      let user = await User.findOne({ $or: [{ email }, { username }] })
+
+      if (user) {
+        return res.status(400).json({ message: "User with that email or username already exists" })
       }
 
-      const { username, email, password, firstName, lastName } = req.body
-
-      // Check if user already exists
-      const existingUser = await User.findOne({
-        $or: [{ email }, { username }],
-      })
-
-      if (existingUser) {
-        if (existingUser.email === email) {
-          return res.status(400).json({ message: "User with this email already exists" })
-        }
-        if (existingUser.username === username) {
-          return res.status(400).json({ message: "Username is already taken" })
-        }
-      }
-
-      // Create new user
-      const user = new User({
+      user = new User({
         username,
         email,
         password,
@@ -72,102 +44,110 @@ router.post(
 
       await user.save()
 
-      // Generate token
-      const token = generateToken(user._id)
-
-      // Update last login
-      user.lastLogin = new Date()
-      await user.save()
-
-      res.status(201).json({
-        message: "User registered successfully",
-        token,
-        user: user.getPublicProfile(),
-      })
-    } catch (error) {
-      console.error("Registration error:", error)
-
-      if (error.code === 11000) {
-        const field = Object.keys(error.keyPattern)[0]
-        return res.status(400).json({
-          message: `${field.charAt(0).toUpperCase() + field.slice(1)} already exists`,
-        })
+      const payload = {
+        user: {
+          id: user.id,
+        },
       }
 
-      res.status(500).json({ message: "Server error during registration" })
+      jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: "1h" }, (err, token) => {
+        if (err) throw err
+        res.status(201).json({
+          message: "User registered successfully",
+          token,
+          user: {
+            id: user.id,
+            username: user.username,
+            email: user.email,
+            firstName: user.firstName,
+            lastName: user.lastName,
+            profilePicture: user.profilePicture,
+            bio: user.bio,
+            location: user.location,
+            points: user.points,
+            isAdmin: user.isAdmin,
+          },
+        })
+      })
+    } catch (err) {
+      console.error(err.message)
+      res.status(500).send("Server error")
     }
   },
 )
 
 // @route   POST /api/auth/login
-// @desc    Login user
+// @desc    Authenticate user & get token
 // @access  Public
 router.post(
   "/login",
-  [
-    body("email").isEmail().normalizeEmail().withMessage("Please provide a valid email"),
-    body("password").exists().withMessage("Password is required"),
-  ],
+  [body("email", "Please include a valid email").isEmail(), body("password", "Password is required").exists()],
   async (req, res) => {
+    const errors = validationResult(req)
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() })
+    }
+
+    const { email, password } = req.body
+
     try {
-      // Check for validation errors
-      const errors = validationResult(req)
-      if (!errors.isEmpty()) {
-        return res.status(400).json({
-          message: "Validation failed",
-          errors: errors.array(),
-        })
-      }
-
-      const { email, password } = req.body
-
-      // Find user by email
       const user = await User.findOne({ email })
+
       if (!user) {
         return res.status(400).json({ message: "Invalid credentials" })
       }
 
-      // Check if account is active
-      if (!user.isActive) {
-        return res.status(400).json({ message: "Account is deactivated" })
-      }
+      const isMatch = await user.matchPassword(password)
 
-      // Verify password
-      const isMatch = await user.comparePassword(password)
       if (!isMatch) {
         return res.status(400).json({ message: "Invalid credentials" })
       }
 
-      // Generate token
-      const token = generateToken(user._id)
+      const payload = {
+        user: {
+          id: user.id,
+        },
+      }
 
-      // Update last login
-      user.lastLogin = new Date()
-      await user.save()
-
-      res.json({
-        message: "Login successful",
-        token,
-        user: user.getPublicProfile(),
+      jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: "1h" }, (err, token) => {
+        if (err) throw err
+        res.json({
+          message: "Logged in successfully",
+          token,
+          user: {
+            id: user.id,
+            username: user.username,
+            email: user.email,
+            firstName: user.firstName,
+            lastName: user.lastName,
+            profilePicture: user.profilePicture,
+            bio: user.bio,
+            location: user.location,
+            points: user.points,
+            isAdmin: user.isAdmin,
+          },
+        })
       })
-    } catch (error) {
-      console.error("Login error:", error)
-      res.status(500).json({ message: "Server error during login" })
+    } catch (err) {
+      console.error(err.message)
+      res.status(500).send("Server error")
     }
   },
 )
 
-// @route   GET /api/auth/me
-// @desc    Get current user
+// @route   GET /api/auth/profile
+// @desc    Get user profile
 // @access  Private
-router.get("/me", auth, async (req, res) => {
+router.get("/profile", protect, async (req, res) => {
   try {
-    res.json({
-      user: req.user.getPublicProfile(),
-    })
-  } catch (error) {
-    console.error("Get user error:", error)
-    res.status(500).json({ message: "Server error" })
+    const user = await User.findById(req.user.id).select("-password")
+    if (!user) {
+      return res.status(404).json({ message: "User not found" })
+    }
+    res.json(user)
+  } catch (err) {
+    console.error(err.message)
+    res.status(500).send("Server error")
   }
 })
 
@@ -176,64 +156,71 @@ router.get("/me", auth, async (req, res) => {
 // @access  Private
 router.put(
   "/profile",
-  auth,
+  protect,
   [
-    body("firstName")
-      .optional()
-      .trim()
-      .isLength({ min: 1, max: 50 })
-      .withMessage("First name cannot exceed 50 characters"),
-    body("lastName")
-      .optional()
-      .trim()
-      .isLength({ min: 1, max: 50 })
-      .withMessage("Last name cannot exceed 50 characters"),
-    body("bio").optional().trim().isLength({ max: 500 }).withMessage("Bio cannot exceed 500 characters"),
-    body("location.city")
-      .optional()
-      .trim()
-      .isLength({ max: 100 })
-      .withMessage("City name cannot exceed 100 characters"),
-    body("location.state")
-      .optional()
-      .trim()
-      .isLength({ max: 100 })
-      .withMessage("State name cannot exceed 100 characters"),
-    body("location.country")
-      .optional()
-      .trim()
-      .isLength({ max: 100 })
-      .withMessage("Country name cannot exceed 100 characters"),
+    body("username", "Username is required").optional().notEmpty(),
+    body("email", "Please include a valid email").optional().isEmail(),
+    body("firstName", "First name is required").optional().notEmpty(),
+    body("lastName", "Last name is required").optional().notEmpty(),
+    body("bio", "Bio cannot exceed 500 characters").optional().isLength({ max: 500 }),
   ],
   async (req, res) => {
+    const errors = validationResult(req)
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() })
+    }
+
+    const { username, email, firstName, lastName, profilePicture, bio, location } = req.body
+
     try {
-      const errors = validationResult(req)
-      if (!errors.isEmpty()) {
-        return res.status(400).json({
-          message: "Validation failed",
-          errors: errors.array(),
-        })
+      const user = await User.findById(req.user.id)
+
+      if (!user) {
+        return res.status(404).json({ message: "User not found" })
       }
 
-      const allowedUpdates = ["firstName", "lastName", "bio", "location", "preferences"]
-      const updates = {}
-
-      // Only include allowed fields
-      Object.keys(req.body).forEach((key) => {
-        if (allowedUpdates.includes(key)) {
-          updates[key] = req.body[key]
+      // Check if new email or username already exists for another user
+      if (email && email !== user.email) {
+        const existingUser = await User.findOne({ email })
+        if (existingUser && existingUser.id !== user.id) {
+          return res.status(400).json({ message: "Email already in use" })
         }
-      })
+      }
+      if (username && username !== user.username) {
+        const existingUser = await User.findOne({ username })
+        if (existingUser && existingUser.id !== user.id) {
+          return res.status(400).json({ message: "Username already in use" })
+        }
+      }
 
-      const user = await User.findByIdAndUpdate(req.user._id, { $set: updates }, { new: true, runValidators: true })
+      user.username = username || user.username
+      user.email = email || user.email
+      user.firstName = firstName || user.firstName
+      user.lastName = lastName || user.lastName
+      user.profilePicture = profilePicture || user.profilePicture
+      user.bio = bio || user.bio
+      user.location = location || user.location
+
+      await user.save()
 
       res.json({
         message: "Profile updated successfully",
-        user: user.getPublicProfile(),
+        user: {
+          id: user.id,
+          username: user.username,
+          email: user.email,
+          firstName: user.firstName,
+          lastName: user.lastName,
+          profilePicture: user.profilePicture,
+          bio: user.bio,
+          location: user.location,
+          points: user.points,
+          isAdmin: user.isAdmin,
+        },
       })
-    } catch (error) {
-      console.error("Profile update error:", error)
-      res.status(500).json({ message: "Server error during profile update" })
+    } catch (err) {
+      console.error(err.message)
+      res.status(500).send("Server error")
     }
   },
 )
@@ -243,177 +230,39 @@ router.put(
 // @access  Private
 router.put(
   "/change-password",
-  auth,
-  sensitiveOpLimit,
+  protect,
   [
-    body("currentPassword").exists().withMessage("Current password is required"),
-    body("newPassword").isLength({ min: 6 }).withMessage("New password must be at least 6 characters long"),
+    body("currentPassword", "Current password is required").exists(),
+    body("newPassword", "New password must be at least 6 characters").isLength({ min: 6 }),
   ],
   async (req, res) => {
+    const errors = validationResult(req)
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() })
+    }
+
+    const { currentPassword, newPassword } = req.body
+
     try {
-      const errors = validationResult(req)
-      if (!errors.isEmpty()) {
-        return res.status(400).json({
-          message: "Validation failed",
-          errors: errors.array(),
-        })
+      const user = await User.findById(req.user.id)
+
+      if (!user) {
+        return res.status(404).json({ message: "User not found" })
       }
 
-      const { currentPassword, newPassword } = req.body
+      const isMatch = await user.matchPassword(currentPassword)
 
-      // Get user with password
-      const user = await User.findById(req.user._id)
-
-      // Verify current password
-      const isMatch = await user.comparePassword(currentPassword)
       if (!isMatch) {
         return res.status(400).json({ message: "Current password is incorrect" })
       }
 
-      // Update password
-      user.password = newPassword
+      user.password = newPassword // Pre-save hook will hash it
       await user.save()
 
-      res.json({ message: "Password changed successfully" })
-    } catch (error) {
-      console.error("Password change error:", error)
-      res.status(500).json({ message: "Server error during password change" })
-    }
-  },
-)
-
-// @route   POST /api/auth/forgot-password
-// @desc    Request password reset
-// @access  Public
-router.post(
-  "/forgot-password",
-  sensitiveOpLimit,
-  [body("email").isEmail().normalizeEmail().withMessage("Please provide a valid email")],
-  async (req, res) => {
-    try {
-      const errors = validationResult(req)
-      if (!errors.isEmpty()) {
-        return res.status(400).json({
-          message: "Validation failed",
-          errors: errors.array(),
-        })
-      }
-
-      const { email } = req.body
-
-      const user = await User.findOne({ email })
-      if (!user) {
-        // Don't reveal if email exists or not
-        return res.json({ message: "If an account with that email exists, a password reset link has been sent." })
-      }
-
-      // Generate reset token (in production, implement proper token generation and email sending)
-      const resetToken = jwt.sign({ userId: user._id }, process.env.JWT_SECRET, { expiresIn: "1h" })
-
-      user.passwordResetToken = resetToken
-      user.passwordResetExpires = new Date(Date.now() + 3600000) // 1 hour
-      await user.save()
-
-      // TODO: Send email with reset link
-      console.log(`Password reset token for ${email}: ${resetToken}`)
-
-      res.json({ message: "If an account with that email exists, a password reset link has been sent." })
-    } catch (error) {
-      console.error("Forgot password error:", error)
-      res.status(500).json({ message: "Server error during password reset request" })
-    }
-  },
-)
-
-// @route   POST /api/auth/reset-password
-// @desc    Reset password with token
-// @access  Public
-router.post(
-  "/reset-password",
-  sensitiveOpLimit,
-  [
-    body("token").exists().withMessage("Reset token is required"),
-    body("newPassword").isLength({ min: 6 }).withMessage("New password must be at least 6 characters long"),
-  ],
-  async (req, res) => {
-    try {
-      const errors = validationResult(req)
-      if (!errors.isEmpty()) {
-        return res.status(400).json({
-          message: "Validation failed",
-          errors: errors.array(),
-        })
-      }
-
-      const { token, newPassword } = req.body
-
-      // Verify token
-      const decoded = jwt.verify(token, process.env.JWT_SECRET)
-
-      const user = await User.findOne({
-        _id: decoded.userId,
-        passwordResetToken: token,
-        passwordResetExpires: { $gt: new Date() },
-      })
-
-      if (!user) {
-        return res.status(400).json({ message: "Invalid or expired reset token" })
-      }
-
-      // Update password
-      user.password = newPassword
-      user.passwordResetToken = undefined
-      user.passwordResetExpires = undefined
-      await user.save()
-
-      res.json({ message: "Password reset successfully" })
-    } catch (error) {
-      console.error("Reset password error:", error)
-      if (error.name === "JsonWebTokenError" || error.name === "TokenExpiredError") {
-        return res.status(400).json({ message: "Invalid or expired reset token" })
-      }
-      res.status(500).json({ message: "Server error during password reset" })
-    }
-  },
-)
-
-// @route   DELETE /api/auth/account
-// @desc    Deactivate user account
-// @access  Private
-router.delete(
-  "/account",
-  auth,
-  sensitiveOpLimit,
-  [body("password").exists().withMessage("Password confirmation is required")],
-  async (req, res) => {
-    try {
-      const errors = validationResult(req)
-      if (!errors.isEmpty()) {
-        return res.status(400).json({
-          message: "Validation failed",
-          errors: errors.array(),
-        })
-      }
-
-      const { password } = req.body
-
-      // Get user with password
-      const user = await User.findById(req.user._id)
-
-      // Verify password
-      const isMatch = await user.comparePassword(password)
-      if (!isMatch) {
-        return res.status(400).json({ message: "Password is incorrect" })
-      }
-
-      // Deactivate account instead of deleting
-      user.isActive = false
-      await user.save()
-
-      res.json({ message: "Account deactivated successfully" })
-    } catch (error) {
-      console.error("Account deactivation error:", error)
-      res.status(500).json({ message: "Server error during account deactivation" })
+      res.json({ message: "Password updated successfully" })
+    } catch (err) {
+      console.error(err.message)
+      res.status(500).send("Server error")
     }
   },
 )

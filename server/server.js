@@ -21,8 +21,9 @@ const server = createServer(app)
 // Socket.io setup
 const io = new Server(server, {
   cors: {
-    origin: process.env.CLIENT_URL || "http://localhost:3000",
+    origin: process.env.NODE_ENV === "production" ? "https://your-rewear-app.vercel.app" : "http://localhost:3000",
     methods: ["GET", "POST"],
+    credentials: true,
   },
 })
 
@@ -41,7 +42,7 @@ app.use("/api/", limiter)
 // CORS
 app.use(
   cors({
-    origin: process.env.CLIENT_URL || "http://localhost:3000",
+    origin: process.env.NODE_ENV === "production" ? "https://your-rewear-app.vercel.app" : "http://localhost:3000",
     credentials: true,
   }),
 )
@@ -52,10 +53,7 @@ app.use(express.urlencoded({ extended: true, limit: "10mb" }))
 
 // MongoDB connection
 mongoose
-  .connect(process.env.MONGODB_URI || "mongodb://localhost:27017/rewear", {
-    useNewUrlParser: true,
-    useUnifiedTopology: true,
-  })
+  .connect(process.env.MONGO_URI)
   .then(() => console.log("✅ MongoDB connected successfully"))
   .catch((err) => {
     console.error("❌ MongoDB connection error:", err)
@@ -74,6 +72,27 @@ io.on("connection", (socket) => {
   socket.on("disconnect", () => {
     console.log("👤 User disconnected:", socket.id)
   })
+
+  // Example: Listen for a swap request event
+  socket.on("sendSwapRequest", (data) => {
+    console.log("Swap request received:", data)
+    // Emit to the recipient of the swap request
+    // You would typically look up the recipient's socket ID based on their user ID
+    // For demonstration, let's assume data.recipientSocketId is provided
+    if (data.recipientSocketId) {
+      io.to(data.recipientSocketId).emit("newSwapRequest", {
+        requesterId: data.requesterId,
+        requesterUsername: data.requesterUsername,
+        itemId: data.itemId,
+        itemName: data.itemName,
+        message: data.message,
+      })
+    } else {
+      console.warn("No recipientSocketId provided for swap request.")
+    }
+  })
+
+  // Add more socket event handlers as needed for real-time features
 })
 
 // Make io accessible to routes
@@ -124,8 +143,10 @@ const PORT = process.env.PORT || 5000
 
 server.listen(PORT, () => {
   console.log(`🚀 Server running on port ${PORT}`)
-  console.log(`📱 Client URL: ${process.env.CLIENT_URL || "http://localhost:3000"}`)
-  console.log(`🗄️  Database: ${process.env.MONGODB_URI || "mongodb://localhost:27017/rewear"}`)
+  console.log(
+    `📱 Client URL: ${process.env.NODE_ENV === "production" ? "https://your-rewear-app.vercel.app" : "http://localhost:3000"}`,
+  )
+  console.log(`🗄️  Database: ${process.env.MONGO_URI}`)
 })
 
 module.exports = app

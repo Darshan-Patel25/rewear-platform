@@ -2,9 +2,23 @@ const express = require("express")
 const { body, validationResult, query } = require("express-validator")
 const Item = require("../models/Item")
 const User = require("../models/User")
-const { auth, optionalAuth, checkOwnership } = require("../middleware/auth")
+const { auth, optionalAuth, checkOwnership, protect } = require("../middleware/auth")
+const cloudinary = require("cloudinary").v2
+const multer = require("multer")
+const path = require("path")
 
 const router = express.Router()
+
+// Configure Cloudinary
+cloudinary.config({
+  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+  api_key: process.env.CLOUDINARY_API_KEY,
+  api_secret: process.env.CLOUDINARY_API_SECRET,
+})
+
+// Multer setup for image upload
+const storage = multer.diskStorage({}) // Use empty disk storage to let Cloudinary handle it
+const upload = multer({ storage: storage })
 
 // @route   GET /api/items
 // @desc    Get all items with filtering and pagination
@@ -168,55 +182,63 @@ router.get("/:id", optionalAuth, async (req, res) => {
 // @access  Private
 router.post(
   "/",
-  auth,
+  protect,
+  upload.array("images", 5), // Allow up to 5 images
   [
-    body("title")
-      .trim()
-      .isLength({ min: 1, max: 100 })
-      .withMessage("Title is required and cannot exceed 100 characters"),
-    body("description")
-      .trim()
-      .isLength({ min: 10, max: 1000 })
-      .withMessage("Description must be between 10 and 1000 characters"),
-    body("category")
-      .isIn(["tops", "bottoms", "dresses", "outerwear", "shoes", "accessories"])
-      .withMessage("Invalid category"),
-    body("size").trim().isLength({ min: 1 }).withMessage("Size is required"),
-    body("condition").isIn(["new", "like-new", "good", "fair"]).withMessage("Invalid condition"),
-    body("pointValue").isInt({ min: 1, max: 500 }).withMessage("Point value must be between 1 and 500"),
-    body("images").isArray({ min: 1, max: 5 }).withMessage("At least 1 image is required, maximum 5 images allowed"),
-    body("images.*.url").isURL().withMessage("Invalid image URL"),
+    body("name", "Item name is required").notEmpty(),
+    body("description", "Description is required").notEmpty(),
+    body("category", "Category is required")
+      .notEmpty()
+      .isIn(["Tops", "Bottoms", "Dresses", "Outerwear", "Footwear", "Accessories", "Other"]),
+    body("size", "Size is required").notEmpty().isIn(["XS", "S", "M", "L", "XL", "XXL", "One Size"]),
+    body("condition", "Condition is required")
+      .notEmpty()
+      .isIn(["New with tags", "Like new", "Gently used", "Used", "Fair"]),
   ],
   async (req, res) => {
+    const errors = validationResult(req)
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() })
+    }
+
+    const { name, description, category, size, condition } = req.body
+
     try {
-      const errors = validationResult(req)
-      if (!errors.isEmpty()) {
-        return res.status(400).json({
-          message: "Validation failed",
-          errors: errors.array(),
+      const images = []
+      if (req.files && req.files.length > 0) {
+        for (const file of req.files) {
+          const result = await cloudinary.uploader.upload(file.path, {
+            folder: "rewear_items", // Optional: folder in Cloudinary
+          })
+          images.push({ url: result.secure_url, public_id: result.public_id })
+        }
+      } else {
+        // Add a default placeholder image if no images are uploaded
+        images.push({
+          url: "https://res.cloudinary.com/your_cloud_name/image/upload/v1/placeholder.jpg", // Replace with your actual placeholder URL
+          public_id: "placeholder_item_default",
         })
       }
 
-      const itemData = {
-        ...req.body,
-        owner: req.user._id,
-      }
-
-      const item = new Item(itemData)
-      await item.save()
-
-      // Update user stats
-      await req.user.updateStats("itemListed")
-
-      const populatedItem = await Item.findById(item._id).populate("owner", "username firstName lastName avatar")
-
-      res.status(201).json({
-        message: "Item created successfully",
-        item: populatedItem,
+      const newItem = new Item({
+        owner: req.user.id,
+        name,
+        description,
+        category,
+        size,
+        condition,
+        images,
       })
-    } catch (error) {
-      console.error("Create item error:", error)
-      res.status(500).json({ message: "Server error while creating item" })
+
+      const item = await newItem.save()
+
+      // Add item to user's itemsListed
+      await User.findByIdAndUpdate(req.user.id, { $push: { itemsListed: item._id } })
+
+      res.status(201).json({ message: "Item created successfully", item })
+    } catch (err) {
+      console.error(err.message)
+      res.status(500).send("Server error")
     }
   },
 )
@@ -226,84 +248,72 @@ router.post(
 // @access  Private (Owner only)
 router.put(
   "/:id",
-  auth,
-  checkOwnership(Item),
+  protect,
+  upload.array("images", 5),
   [
-    body("title").optional().trim().isLength({ min: 1, max: 100 }).withMessage("Title cannot exceed 100 characters"),
-    body("description")
+    body("name", "Item name is required").optional().notEmpty(),
+    body("description", "Description is required").optional().notEmpty(),
+    body("category", "Category is required")
       .optional()
-      .trim()
-      .isLength({ min: 10, max: 1000 })
-      .withMessage("Description must be between 10 and 1000 characters"),
-    body("category")
+      .notEmpty()
+      .isIn(["Tops", "Bottoms", "Dresses", "Outerwear", "Footwear", "Accessories", "Other"]),
+    body("size", "Size is required").optional().notEmpty().isIn(["XS", "S", "M", "L", "XL", "XXL", "One Size"]),
+    body("condition", "Condition is required")
       .optional()
-      .isIn(["tops", "bottoms", "dresses", "outerwear", "shoes", "accessories"])
-      .withMessage("Invalid category"),
-    body("size").optional().trim().isLength({ min: 1 }).withMessage("Size cannot be empty"),
-    body("condition").optional().isIn(["new", "like-new", "good", "fair"]).withMessage("Invalid condition"),
-    body("pointValue").optional().isInt({ min: 1, max: 500 }).withMessage("Point value must be between 1 and 500"),
+      .notEmpty()
+      .isIn(["New with tags", "Like new", "Gently used", "Used", "Fair"]),
   ],
   async (req, res) => {
+    const errors = validationResult(req)
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() })
+    }
+
+    const { name, description, category, size, condition, isAvailable } = req.body
+
     try {
-      const errors = validationResult(req)
-      if (!errors.isEmpty()) {
-        return res.status(400).json({
-          message: "Validation failed",
-          errors: errors.array(),
-        })
+      const item = await Item.findById(req.params.id)
+
+      if (!item) {
+        return res.status(404).json({ message: "Item not found" })
       }
 
-      const item = req.resource
-
-      // Check if item can be edited
-      if (!item.canEdit(req.user._id)) {
-        return res.status(400).json({
-          message: "Item cannot be edited in its current status",
-        })
+      // Check if user owns the item
+      if (item.owner.toString() !== req.user.id) {
+        return res.status(401).json({ message: "Not authorized to update this item" })
       }
 
-      // Update allowed fields
-      const allowedUpdates = [
-        "title",
-        "description",
-        "category",
-        "subcategory",
-        "brand",
-        "size",
-        "condition",
-        "color",
-        "material",
-        "pointValue",
-        "tags",
-        "measurements",
-        "originalPrice",
-        "purchaseDate",
-        "shippingOptions",
-      ]
-
-      allowedUpdates.forEach((field) => {
-        if (req.body[field] !== undefined) {
-          item[field] = req.body[field]
+      // Handle image updates
+      if (req.files && req.files.length > 0) {
+        // Delete old images from Cloudinary
+        for (const img of item.images) {
+          await cloudinary.uploader.destroy(img.public_id)
         }
-      })
+        // Upload new images
+        const newImages = []
+        for (const file of req.files) {
+          const result = await cloudinary.uploader.upload(file.path, {
+            folder: "rewear_items",
+          })
+          newImages.push({ url: result.secure_url, public_id: result.public_id })
+        }
+        item.images = newImages
+      }
 
-      // Reset status to pending if item was rejected
-      if (item.status === "rejected") {
-        item.status = "pending"
-        item.rejectionReason = undefined
+      item.name = name || item.name
+      item.description = description || item.description
+      item.category = category || item.category
+      item.size = size || item.size
+      item.condition = condition || item.condition
+      if (typeof isAvailable === "boolean") {
+        item.isAvailable = isAvailable
       }
 
       await item.save()
-
-      const updatedItem = await Item.findById(item._id).populate("owner", "username firstName lastName avatar")
-
-      res.json({
-        message: "Item updated successfully",
-        item: updatedItem,
-      })
-    } catch (error) {
-      console.error("Update item error:", error)
-      res.status(500).json({ message: "Server error while updating item" })
+      res.json({ message: "Item updated successfully", item })
+    } catch (err) {
+      console.error(err.message)
+      res.status(500).send("Server error")
     }
   },
 )
@@ -311,30 +321,7 @@ router.put(
 // @route   DELETE /api/items/:id
 // @desc    Delete item
 // @access  Private (Owner only)
-router.delete("/:id", auth, checkOwnership(Item), async (req, res) => {
-  try {
-    const item = req.resource
-
-    // Check if item can be deleted
-    if (!["pending", "rejected", "available"].includes(item.status)) {
-      return res.status(400).json({
-        message: "Item cannot be deleted in its current status",
-      })
-    }
-
-    await Item.findByIdAndDelete(item._id)
-
-    res.json({ message: "Item deleted successfully" })
-  } catch (error) {
-    console.error("Delete item error:", error)
-    res.status(500).json({ message: "Server error while deleting item" })
-  }
-})
-
-// @route   POST /api/items/:id/like
-// @desc    Toggle like on item
-// @access  Private
-router.post("/:id/like", auth, async (req, res) => {
+router.delete("/:id", protect, async (req, res) => {
   try {
     const item = await Item.findById(req.params.id)
 
@@ -342,20 +329,77 @@ router.post("/:id/like", auth, async (req, res) => {
       return res.status(404).json({ message: "Item not found" })
     }
 
-    if (item.status !== "available") {
-      return res.status(400).json({ message: "Cannot like unavailable item" })
+    // Check if user owns the item
+    if (item.owner.toString() !== req.user.id) {
+      return res.status(401).json({ message: "Not authorized to delete this item" })
     }
 
-    await item.toggleLike(req.user._id)
+    // Delete images from Cloudinary
+    for (const img of item.images) {
+      await cloudinary.uploader.destroy(img.public_id)
+    }
 
-    res.json({
-      message: "Like toggled successfully",
-      liked: item.likes.includes(req.user._id),
-      likeCount: item.likes.length,
-    })
-  } catch (error) {
-    console.error("Toggle like error:", error)
-    res.status(500).json({ message: "Server error while toggling like" })
+    await Item.deleteOne({ _id: req.params.id })
+
+    // Remove item from user's itemsListed
+    await User.findByIdAndUpdate(req.user.id, { $pull: { itemsListed: req.params.id } })
+
+    res.json({ message: "Item removed successfully" })
+  } catch (err) {
+    console.error(err.message)
+    res.status(500).send("Server error")
+  }
+})
+
+// @route   PUT /api/items/like/:id
+// @desc    Like an item
+// @access  Private
+router.put("/like/:id", protect, async (req, res) => {
+  try {
+    const item = await Item.findById(req.params.id)
+
+    if (!item) {
+      return res.status(404).json({ message: "Item not found" })
+    }
+
+    // Check if the item has already been liked by this user
+    if (item.likes.includes(req.user.id)) {
+      return res.status(400).json({ message: "Item already liked" })
+    }
+
+    item.likes.push(req.user.id)
+    await item.save()
+
+    res.json({ message: "Item liked", likes: item.likes.length })
+  } catch (err) {
+    console.error(err.message)
+    res.status(500).send("Server error")
+  }
+})
+
+// @route   PUT /api/items/unlike/:id
+// @desc    Unlike an item
+// @access  Private
+router.put("/unlike/:id", protect, async (req, res) => {
+  try {
+    const item = await Item.findById(req.params.id)
+
+    if (!item) {
+      return res.status(404).json({ message: "Item not found" })
+    }
+
+    // Check if the item has not yet been liked by this user
+    if (!item.likes.includes(req.user.id)) {
+      return res.status(400).json({ message: "Item has not yet been liked" })
+    }
+
+    item.likes = item.likes.filter((like) => like.toString() !== req.user.id)
+    await item.save()
+
+    res.json({ message: "Item unliked", likes: item.likes.length })
+  } catch (err) {
+    console.error(err.message)
+    res.status(500).send("Server error")
   }
 })
 
@@ -364,7 +408,7 @@ router.post("/:id/like", auth, async (req, res) => {
 // @access  Private
 router.post(
   "/:id/report",
-  auth,
+  protect,
   [
     body("reason").isIn(["inappropriate", "spam", "fake", "damaged", "other"]).withMessage("Invalid report reason"),
     body("description")
