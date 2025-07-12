@@ -17,7 +17,7 @@ const itemSchema = new mongoose.Schema(
     category: {
       type: String,
       required: [true, "Category is required"],
-      enum: ["Tops", "Bottoms", "Dresses", "Outerwear", "Footwear", "Accessories", "Other"],
+      enum: ["Tops", "Bottoms", "Dresses", "Outerwear", "Shoes", "Accessories", "Other"],
     },
     subcategory: {
       type: String,
@@ -53,6 +53,7 @@ const itemSchema = new mongoose.Schema(
         url: {
           type: String,
           required: true,
+          default: "/placeholder.png", // Default placeholder image
         },
         publicId: String, // For Cloudinary
         alt: String,
@@ -139,6 +140,10 @@ const itemSchema = new mongoose.Schema(
     isAvailable: {
       type: Boolean,
       default: true,
+    },
+    createdAt: {
+      type: Date,
+      default: Date.now,
     },
   },
   {

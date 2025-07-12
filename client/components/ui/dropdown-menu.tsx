@@ -2,7 +2,7 @@
 
 import * as React from "react"
 import * as DropdownMenuPrimitive from "@radix-ui/react-dropdown-menu"
-import { Check, ChevronRight, Dot } from "lucide-react"
+import { Check, ChevronRight, DotIcon as DotFilledIcon } from "lucide-react"
 
 import { cn } from "@/lib/utils"
 
@@ -127,9 +127,10 @@ const DropdownMenuRadioItem = React.forwardRef<
   >
     <span className="absolute left-2 flex h-3.5 w-3.5 items-center justify-center">
       <DropdownMenuPrimitive.ItemIndicator>
-        <Dot className="h-4 w-4 fill-current" />
+        <DotFilledIcon className="h-4 w-4 fill-current" />
       </DropdownMenuPrimitive.ItemIndicator>
     </span>
+    {children}
   </DropdownMenuPrimitive.RadioItem>
 ))
 DropdownMenuRadioItem.displayName = DropdownMenuPrimitive.RadioItem.displayName

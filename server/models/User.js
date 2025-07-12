@@ -1,13 +1,12 @@
 const mongoose = require("mongoose")
 const bcrypt = require("bcryptjs")
 
-const userSchema = new mongoose.Schema({
+const UserSchema = new mongoose.Schema({
   username: {
     type: String,
     required: true,
     unique: true,
     trim: true,
-    minlength: 3,
   },
   email: {
     type: String,
@@ -15,55 +14,38 @@ const userSchema = new mongoose.Schema({
     unique: true,
     trim: true,
     lowercase: true,
+    match: [/.+@.+\..+/, "Please fill a valid email address"],
   },
   password: {
     type: String,
     required: true,
     minlength: 6,
   },
-  firstName: {
-    type: String,
-    required: true,
-    trim: true,
-  },
-  lastName: {
-    type: String,
-    required: true,
-    trim: true,
-  },
   profilePicture: {
     type: String,
-    default: "https://res.cloudinary.com/your_cloud_name/image/upload/v1/placeholder-user.jpg", // Placeholder image
+    default: "/placeholder-user.png", // Default placeholder image
   },
   bio: {
     type: String,
     maxlength: 500,
+    default: "",
   },
   location: {
     type: String,
+    default: "",
   },
-  itemsListed: [
+  items: [
     {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Item",
     },
   ],
-  swapsInitiated: [
+  swaps: [
     {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Swap",
     },
   ],
-  swapsReceived: [
-    {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "Swap",
-    },
-  ],
-  points: {
-    type: Number,
-    default: 0,
-  },
   isAdmin: {
     type: Boolean,
     default: false,
@@ -75,7 +57,7 @@ const userSchema = new mongoose.Schema({
 })
 
 // Hash password before saving
-userSchema.pre("save", async function (next) {
+UserSchema.pre("save", async function (next) {
   if (!this.isModified("password")) {
     return next()
   }
@@ -85,22 +67,8 @@ userSchema.pre("save", async function (next) {
 })
 
 // Method to compare passwords
-userSchema.methods.matchPassword = async function (enteredPassword) {
+UserSchema.methods.matchPassword = async function (enteredPassword) {
   return await bcrypt.compare(enteredPassword, this.password)
 }
 
-// Method to calculate and update points (example logic)
-userSchema.methods.calculatePoints = async function () {
-  // Example: 10 points for each item listed, 50 points for each successful swap
-  const itemsCount = this.itemsListed.length
-  const successfulSwapsCount = await mongoose.model("Swap").countDocuments({
-    $or: [
-      { initiator: this._id, status: "completed" },
-      { receiver: this._id, status: "completed" },
-    ],
-  })
-  this.points = itemsCount * 10 + successfulSwapsCount * 50
-  await this.save()
-}
-
-module.exports = mongoose.model("User", userSchema)
+module.exports = mongoose.model("User", UserSchema)

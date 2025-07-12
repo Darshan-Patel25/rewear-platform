@@ -14,6 +14,7 @@ const authRoutes = require("./routes/auth")
 const itemRoutes = require("./routes/items")
 const swapRoutes = require("./routes/swaps")
 const adminRoutes = require("./routes/admin")
+const authMiddleware = require("./middleware/auth")
 
 const app = express()
 const server = createServer(app)
@@ -21,7 +22,7 @@ const server = createServer(app)
 // Socket.io setup
 const io = new Server(server, {
   cors: {
-    origin: process.env.NODE_ENV === "production" ? "https://your-rewear-app.vercel.app" : "http://localhost:3000",
+    origin: process.env.NODE_ENV === "production" ? "https://your-frontend-domain.com" : "http://localhost:3000",
     methods: ["GET", "POST"],
     credentials: true,
   },
@@ -42,7 +43,7 @@ app.use("/api/", limiter)
 // CORS
 app.use(
   cors({
-    origin: process.env.NODE_ENV === "production" ? "https://your-rewear-app.vercel.app" : "http://localhost:3000",
+    origin: process.env.NODE_ENV === "production" ? "https://your-frontend-domain.com" : "http://localhost:3000",
     credentials: true,
   }),
 )
@@ -63,6 +64,15 @@ mongoose
 // Socket.io connection handling
 io.on("connection", (socket) => {
   console.log("👤 User connected:", socket.id)
+
+  // Authenticate socket connection (optional, but good for security)
+  // You might want to verify the token here and associate the socket with a user ID
+  const token = socket.handshake.auth.token
+  if (token) {
+    // Verify token and attach user info to socket if valid
+    // For now, we'll just log it
+    console.log("Socket authenticated with token:", token.substring(0, 10) + "...")
+  }
 
   socket.on("join-room", (userId) => {
     socket.join(userId)
@@ -92,6 +102,12 @@ io.on("connection", (socket) => {
     }
   })
 
+  // Example: Listen for a custom event
+  socket.on("sendMessage", (message) => {
+    console.log("Message received:", message)
+    io.emit("receiveMessage", message) // Broadcast to all connected clients
+  })
+
   // Add more socket event handlers as needed for real-time features
 })
 
@@ -100,9 +116,9 @@ app.set("io", io)
 
 // Routes
 app.use("/api/auth", authRoutes)
-app.use("/api/items", itemRoutes)
-app.use("/api/swaps", swapRoutes)
-app.use("/api/admin", adminRoutes)
+app.use("/api/items", authMiddleware, itemRoutes) // Protect item routes
+app.use("/api/swaps", authMiddleware, swapRoutes) // Protect swap routes
+app.use("/api/admin", authMiddleware, adminRoutes) // Protect admin routes
 
 // Health check endpoint
 app.get("/api/health", (req, res) => {
@@ -144,7 +160,7 @@ const PORT = process.env.PORT || 5000
 server.listen(PORT, () => {
   console.log(`🚀 Server running on port ${PORT}`)
   console.log(
-    `📱 Client URL: ${process.env.NODE_ENV === "production" ? "https://your-rewear-app.vercel.app" : "http://localhost:3000"}`,
+    `📱 Client URL: ${process.env.NODE_ENV === "production" ? "https://your-frontend-domain.com" : "http://localhost:3000"}`,
   )
   console.log(`🗄️  Database: ${process.env.MONGO_URI}`)
 })

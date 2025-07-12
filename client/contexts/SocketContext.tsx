@@ -2,7 +2,7 @@
 
 import type React from "react"
 import { createContext, useContext, useEffect, useState, useCallback } from "react"
-import io, { type Socket } from "socket.io-client"
+import { io, type Socket } from "socket.io-client"
 import { useAuth } from "./AuthContext"
 import { toast } from "sonner"
 
@@ -14,79 +14,73 @@ interface SocketContextType {
 const SocketContext = createContext<SocketContextType | undefined>(undefined)
 
 export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const { token, isAuthenticated } = useAuth()
+  const { user, token } = useAuth()
   const [socket, setSocket] = useState<Socket | null>(null)
   const [isConnected, setIsConnected] = useState(false)
 
-  const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:5000/api"
-  const SOCKET_SERVER_URL = API_BASE_URL.replace("/api", "") // Assuming socket server is at root of API base URL
+  const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL?.replace("/api", "") || "http://localhost:5000"
 
   const connectSocket = useCallback(() => {
-    if (isAuthenticated && token && !socket) {
-      const newSocket = io(SOCKET_SERVER_URL, {
-        auth: {
-          token: token,
-        },
-        transports: ["websocket", "polling"],
+    if (user && token && !socket) {
+      const newSocket = io(API_BASE_URL, {
+        auth: { token },
+        transports: ["websocket"],
       })
 
       newSocket.on("connect", () => {
         setIsConnected(true)
         console.log("Socket connected:", newSocket.id)
-        toast.success("Real-time connection established!")
       })
 
-      newSocket.on("disconnect", (reason) => {
+      newSocket.on("disconnect", () => {
         setIsConnected(false)
-        console.log("Socket disconnected:", reason)
-        toast.warning(`Real-time connection lost: ${reason}`)
-        setSocket(null) // Clear socket on disconnect to allow reconnection
+        console.log("Socket disconnected")
       })
 
       newSocket.on("connect_error", (err) => {
         console.error("Socket connection error:", err.message)
         toast.error(`Socket connection error: ${err.message}`)
-        setSocket(null) // Clear socket on error to allow reconnection attempts
       })
 
-      // Example of listening for a custom event
       newSocket.on("newSwapRequest", (data) => {
-        toast.info(`New swap request from ${data.requesterUsername} for your item: ${data.itemName}`)
-        // You might want to update UI or state here
+        toast.info(`New swap request from ${data.requesterName} for your item: ${data.itemName}`)
+      })
+
+      newSocket.on("swapAccepted", (data) => {
+        toast.success(`Your swap request for ${data.itemName} was accepted by ${data.accepterName}!`)
+      })
+
+      newSocket.on("swapDeclined", (data) => {
+        toast.warning(`Your swap request for ${data.itemName} was declined by ${data.declinerName}.`)
+      })
+
+      newSocket.on("swapCompleted", (data) => {
+        toast.success(`Swap for ${data.itemName} completed!`)
       })
 
       setSocket(newSocket)
     }
-  }, [isAuthenticated, token, socket, SOCKET_SERVER_URL])
+  }, [user, token, socket, API_BASE_URL])
 
   const disconnectSocket = useCallback(() => {
     if (socket) {
       socket.disconnect()
       setSocket(null)
       setIsConnected(false)
-      console.log("Socket manually disconnected.")
     }
   }, [socket])
 
   useEffect(() => {
-    if (isAuthenticated && token && !socket) {
+    if (user && token) {
       connectSocket()
-    } else if (!isAuthenticated && socket) {
+    } else {
       disconnectSocket()
     }
 
-    // Clean up on component unmount
     return () => {
-      if (socket) {
-        socket.off("connect")
-        socket.off("disconnect")
-        socket.off("connect_error")
-        socket.off("newSwapRequest")
-        socket.disconnect()
-        setSocket(null)
-      }
+      disconnectSocket()
     }
-  }, [isAuthenticated, token, socket, connectSocket, disconnectSocket])
+  }, [user, token, connectSocket, disconnectSocket])
 
   return <SocketContext.Provider value={{ socket, isConnected }}>{children}</SocketContext.Provider>
 }

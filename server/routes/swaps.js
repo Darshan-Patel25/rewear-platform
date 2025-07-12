@@ -7,65 +7,180 @@ const { auth, protect } = require("../middleware/auth")
 
 const router = express.Router()
 
+// Helper function to emit socket events
+const emitSocketEvent = (req, eventName, data) => {
+  const io = req.app.get("socketio")
+  if (io) {
+    io.emit(eventName, data) // Emits to all connected clients
+    // For targeted notifications, you might use io.to(userId).emit(...)
+  }
+}
+
 // @route   GET /api/swaps
-// @desc    Get user's swaps
+// @desc    Get all swaps (for a user, or all if admin)
 // @access  Private
-router.get(
-  "/",
-  auth,
-  [
-    query("status").optional().isIn(["pending", "accepted", "rejected", "completed", "cancelled"]),
-    query("type").optional().isIn(["direct", "points"]),
-    query("page").optional().isInt({ min: 1 }),
-    query("limit").optional().isInt({ min: 1, max: 50 }),
-  ],
-  async (req, res) => {
-    try {
-      const errors = validationResult(req)
-      if (!errors.isEmpty()) {
-        return res.status(400).json({
-          message: "Validation failed",
-          errors: errors.array(),
-        })
-      }
-
-      const { status, type, page = 1, limit = 10 } = req.query
-
-      // Build filter
-      const filter = {
-        $or: [{ requester: req.user._id }, { owner: req.user._id }],
-      }
-
-      if (status) filter.status = status
-      if (type) filter.type = type
-
-      const swaps = await Swap.find(filter)
-        .populate("requester", "username firstName lastName avatar")
-        .populate("owner", "username firstName lastName avatar")
-        .populate("requestedItem", "title images pointValue status")
-        .populate("offeredItem", "title images pointValue status")
-        .sort({ createdAt: -1 })
-        .limit(limit * 1)
-        .skip((page - 1) * limit)
-
-      const total = await Swap.countDocuments(filter)
-
-      res.json({
-        swaps,
-        pagination: {
-          current: Number.parseInt(page),
-          pages: Math.ceil(total / limit),
-          total,
-          hasNext: page * limit < total,
-          hasPrev: page > 1,
-        },
+router.get("/", protect, async (req, res) => {
+  try {
+    let swaps
+    if (req.user.isAdmin) {
+      swaps = await Swap.find()
+        .populate("requester", "username email")
+        .populate("requestedItem", "name owner")
+        .populate("offeredItem", "name owner")
+    } else {
+      // Get swaps where user is requester or owner of requested/offered item
+      swaps = await Swap.find({
+        $or: [
+          { requester: req.user.id },
+          { "requestedItem.owner": req.user.id }, // This requires a lookup or pre-population
+          { "offeredItem.owner": req.user.id },
+        ],
       })
-    } catch (error) {
-      console.error("Get swaps error:", error)
-      res.status(500).json({ message: "Server error while fetching swaps" })
+        .populate("requester", "username email")
+        .populate("requestedItem", "name owner")
+        .populate("offeredItem", "name owner")
+
+      // Further filter if populate doesn't handle the owner check directly in the query
+      swaps = swaps.filter(
+        (swap) =>
+          swap.requester._id.toString() === req.user.id ||
+          (swap.requestedItem && swap.requestedItem.owner.toString() === req.user.id) ||
+          (swap.offeredItem && swap.offeredItem.owner.toString() === req.user.id),
+      )
     }
-  },
-)
+    res.status(200).json(swaps)
+  } catch (error) {
+    console.error(error)
+    res.status(500).json({ message: "Server error" })
+  }
+})
+
+// @route   GET /api/swaps/my-swaps
+// @desc    Get all swaps involving the authenticated user
+// @access  Private
+router.get("/my-swaps", protect, async (req, res) => {
+  try {
+    const userId = req.user.id
+    const swaps = await Swap.find({
+      $or: [{ initiator: userId }, { receiver: userId }],
+    })
+      .populate("initiator", "username profilePicture")
+      .populate("receiver", "username profilePicture")
+      .populate("initiatorItem", "name images")
+      .populate("receiverItem", "name images")
+      .sort({ createdAt: -1 })
+
+    res.json(swaps)
+  } catch (err) {
+    console.error(err.message)
+    res.status(500).send("Server error")
+  }
+})
+
+// @route   POST /api/swaps
+// @desc    Create a new swap request
+// @access  Private
+router.post("/", protect, async (req, res) => {
+  const { requestedItemId, offeredItemId, message } = req.body
+
+  try {
+    const requestedItem = await Item.findById(requestedItemId)
+    if (!requestedItem) {
+      return res.status(404).json({ message: "Requested item not found" })
+    }
+
+    if (requestedItem.owner.toString() === req.user.id) {
+      return res.status(400).json({ message: "Cannot request a swap for your own item" })
+    }
+
+    let offeredItem = null
+    if (offeredItemId) {
+      offeredItem = await Item.findById(offeredItemId)
+      if (!offeredItem) {
+        return res.status(404).json({ message: "Offered item not found" })
+      }
+      if (offeredItem.owner.toString() !== req.user.id) {
+        return res.status(400).json({ message: "Offered item must belong to you" })
+      }
+    }
+
+    // Check for existing pending swap between these items/users
+    const existingSwap = await Swap.findOne({
+      requester: req.user.id,
+      requestedItem: requestedItemId,
+      offeredItem: offeredItemId,
+      status: "pending",
+    })
+
+    if (existingSwap) {
+      return res.status(400).json({ message: "A pending swap request already exists for these items." })
+    }
+
+    const newSwap = new Swap({
+      requester: req.user.id,
+      requestedItem: requestedItemId,
+      offeredItem: offeredItemId,
+      message,
+      status: "pending",
+    })
+
+    const swap = await newSwap.save()
+
+    // Add swap to participants' swap arrays
+    await User.findByIdAndUpdate(req.user.id, { $push: { swaps: swap._id } })
+    await User.findByIdAndUpdate(requestedItem.owner, { $push: { swaps: swap._id } })
+    if (offeredItem) {
+      await User.findByIdAndUpdate(offeredItem.owner, { $push: { swaps: swap._id } })
+    }
+
+    // Emit socket event for the owner of the requested item
+    emitSocketEvent(req, "newSwapRequest", {
+      swapId: swap._id,
+      requesterId: req.user.id,
+      requesterName: req.user.username,
+      requestedItemId: requestedItem._id,
+      itemName: requestedItem.name,
+      ownerId: requestedItem.owner,
+      message: `New swap request for your item ${requestedItem.name}`,
+    })
+
+    res.status(201).json(swap)
+  } catch (error) {
+    console.error(error)
+    res.status(500).json({ message: "Server error" })
+  }
+})
+
+// @route   GET /api/swaps/:id
+// @desc    Get single swap by ID
+// @access  Private
+router.get("/:id", protect, async (req, res) => {
+  try {
+    const swap = await Swap.findById(req.params.id)
+      .populate("requester", "username email")
+      .populate("requestedItem", "name owner")
+      .populate("offeredItem", "name owner")
+
+    if (!swap) {
+      return res.status(404).json({ message: "Swap not found" })
+    }
+
+    // Ensure only participants or admin can view the swap
+    const isParticipant =
+      swap.requester._id.toString() === req.user.id ||
+      (swap.requestedItem && swap.requestedItem.owner.toString() === req.user.id) ||
+      (swap.offeredItem && swap.offeredItem.owner.toString() === req.user.id)
+
+    if (!isParticipant && !req.user.isAdmin) {
+      return res.status(403).json({ message: "Not authorized to view this swap" })
+    }
+
+    res.status(200).json(swap)
+  } catch (error) {
+    console.error(error)
+    res.status(500).json({ message: "Server error" })
+  }
+})
 
 // @route   POST /api/swaps/request
 // @desc    Initiate a new swap request
@@ -161,158 +276,135 @@ router.post(
   },
 )
 
-// @route   GET /api/swaps/my-swaps
-// @desc    Get all swaps involving the authenticated user
-// @access  Private
-router.get("/my-swaps", protect, async (req, res) => {
+// @route   PUT /api/swaps/:id/accept
+// @desc    Accept a swap request
+// @access  Private (owner of requested item only)
+router.put("/:id/accept", protect, async (req, res) => {
   try {
-    const userId = req.user.id
-    const swaps = await Swap.find({
-      $or: [{ initiator: userId }, { receiver: userId }],
-    })
-      .populate("initiator", "username profilePicture")
-      .populate("receiver", "username profilePicture")
-      .populate("initiatorItem", "name images")
-      .populate("receiverItem", "name images")
-      .sort({ createdAt: -1 })
+    const swap = await Swap.findById(req.params.id).populate("requestedItem")
 
-    res.json(swaps)
-  } catch (err) {
-    console.error(err.message)
-    res.status(500).send("Server error")
+    if (!swap) {
+      return res.status(404).json({ message: "Swap not found" })
+    }
+
+    if (swap.requestedItem.owner.toString() !== req.user.id) {
+      return res.status(403).json({ message: "Not authorized to accept this swap" })
+    }
+
+    if (swap.status !== "pending") {
+      return res.status(400).json({ message: `Swap is already ${swap.status}` })
+    }
+
+    swap.status = "accepted"
+    swap.updatedAt = Date.now()
+    await swap.save()
+
+    // Mark items as unavailable (or swapped)
+    await Item.findByIdAndUpdate(swap.requestedItem._id, { isAvailable: false })
+    if (swap.offeredItem) {
+      await Item.findByIdAndUpdate(swap.offeredItem, { isAvailable: false })
+    }
+
+    // Emit socket event to the requester
+    emitSocketEvent(req, "swapAccepted", {
+      swapId: swap._id,
+      requesterId: swap.requester,
+      accepterName: req.user.username,
+      itemName: swap.requestedItem.name,
+      message: `Your swap request for ${swap.requestedItem.name} was accepted!`,
+    })
+
+    res.status(200).json(swap)
+  } catch (error) {
+    console.error(error)
+    res.status(500).json({ message: "Server error" })
   }
 })
 
-// @route   POST /api/swaps
-// @desc    Create new swap request
-// @access  Private
-router.post(
-  "/",
-  auth,
-  [
-    body("type").isIn(["direct", "points"]).withMessage("Invalid swap type"),
-    body("requestedItem").isMongoId().withMessage("Invalid requested item ID"),
-    body("offeredItem").optional().isMongoId().withMessage("Invalid offered item ID"),
-    body("pointsOffered").optional().isInt({ min: 1 }).withMessage("Points offered must be positive"),
-    body("message").optional().trim().isLength({ max: 500 }).withMessage("Message cannot exceed 500 characters"),
-  ],
-  async (req, res) => {
-    try {
-      const errors = validationResult(req)
-      if (!errors.isEmpty()) {
-        return res.status(400).json({
-          message: "Validation failed",
-          errors: errors.array(),
-        })
-      }
+// @route   PUT /api/swaps/:id/decline
+// @desc    Decline a swap request
+// @access  Private (owner of requested item only)
+router.put("/:id/decline", protect, async (req, res) => {
+  try {
+    const swap = await Swap.findById(req.params.id).populate("requestedItem")
 
-      const { type, requestedItem, offeredItem, pointsOffered, message } = req.body
-
-      // Get requested item
-      const requestedItemDoc = await Item.findById(requestedItem).populate("owner")
-      if (!requestedItemDoc) {
-        return res.status(404).json({ message: "Requested item not found" })
-      }
-
-      if (requestedItemDoc.status !== "available") {
-        return res.status(400).json({ message: "Requested item is not available" })
-      }
-
-      if (requestedItemDoc.owner._id.toString() === req.user._id.toString()) {
-        return res.status(400).json({ message: "Cannot create swap with your own item" })
-      }
-
-      // Validate swap type requirements
-      if (type === "direct") {
-        if (!offeredItem) {
-          return res.status(400).json({ message: "Offered item is required for direct swaps" })
-        }
-
-        const offeredItemDoc = await Item.findById(offeredItem)
-        if (!offeredItemDoc) {
-          return res.status(404).json({ message: "Offered item not found" })
-        }
-
-        if (offeredItemDoc.owner.toString() !== req.user._id.toString()) {
-          return res.status(403).json({ message: "You can only offer your own items" })
-        }
-
-        if (offeredItemDoc.status !== "available") {
-          return res.status(400).json({ message: "Offered item is not available" })
-        }
-      }
-
-      if (type === "points") {
-        if (!pointsOffered) {
-          return res.status(400).json({ message: "Points offered is required for point swaps" })
-        }
-
-        if (req.user.points < pointsOffered) {
-          return res.status(400).json({ message: "Insufficient points" })
-        }
-
-        if (pointsOffered < requestedItemDoc.pointValue) {
-          return res.status(400).json({
-            message: `Minimum ${requestedItemDoc.pointValue} points required for this item`,
-          })
-        }
-      }
-
-      // Check for existing pending swap
-      const existingSwap = await Swap.findOne({
-        requester: req.user._id,
-        requestedItem: requestedItem,
-        status: "pending",
-      })
-
-      if (existingSwap) {
-        return res.status(400).json({ message: "You already have a pending swap for this item" })
-      }
-
-      // Create swap
-      const swapData = {
-        type,
-        requester: req.user._id,
-        owner: requestedItemDoc.owner._id,
-        requestedItem,
-        message,
-      }
-
-      if (type === "direct") {
-        swapData.offeredItem = offeredItem
-      } else {
-        swapData.pointsOffered = pointsOffered
-      }
-
-      const swap = new Swap(swapData)
-      await swap.save()
-
-      // Populate the swap for response
-      const populatedSwap = await Swap.findById(swap._id)
-        .populate("requester", "username firstName lastName avatar")
-        .populate("owner", "username firstName lastName avatar")
-        .populate("requestedItem", "title images pointValue")
-        .populate("offeredItem", "title images pointValue")
-
-      // Notify owner via socket
-      const io = req.app.get("io")
-      if (io) {
-        io.to(requestedItemDoc.owner._id.toString()).emit("swap-request", {
-          swap: populatedSwap,
-          message: "You have a new swap request!",
-        })
-      }
-
-      res.status(201).json({
-        message: "Swap request created successfully",
-        swap: populatedSwap,
-      })
-    } catch (error) {
-      console.error("Create swap error:", error)
-      res.status(500).json({ message: "Server error while creating swap" })
+    if (!swap) {
+      return res.status(404).json({ message: "Swap not found" })
     }
-  },
-)
+
+    if (swap.requestedItem.owner.toString() !== req.user.id) {
+      return res.status(403).json({ message: "Not authorized to decline this swap" })
+    }
+
+    if (swap.status !== "pending") {
+      return res.status(400).json({ message: `Swap is already ${swap.status}` })
+    }
+
+    swap.status = "declined"
+    swap.updatedAt = Date.now()
+    await swap.save()
+
+    // Emit socket event to the requester
+    emitSocketEvent(req, "swapDeclined", {
+      swapId: swap._id,
+      requesterId: swap.requester,
+      declinerName: req.user.username,
+      itemName: swap.requestedItem.name,
+      message: `Your swap request for ${swap.requestedItem.name} was declined.`,
+    })
+
+    res.status(200).json(swap)
+  } catch (error) {
+    console.error(error)
+    res.status(500).json({ message: "Server error" })
+  }
+})
+
+// @route   PUT /api/swaps/:id/complete
+// @desc    Mark a swap as completed
+// @access  Private (either participant can mark as complete)
+router.put("/:id/complete", protect, async (req, res) => {
+  try {
+    const swap = await Swap.findById(req.params.id).populate("requester").populate("requestedItem")
+
+    if (!swap) {
+      return res.status(404).json({ message: "Swap not found" })
+    }
+
+    const isParticipant =
+      swap.requester._id.toString() === req.user.id || swap.requestedItem.owner.toString() === req.user.id
+
+    if (!isParticipant) {
+      return res.status(403).json({ message: "Not authorized to complete this swap" })
+    }
+
+    if (swap.status !== "accepted") {
+      return res
+        .status(400)
+        .json({ message: `Swap must be 'accepted' to be completed. Current status: ${swap.status}` })
+    }
+
+    swap.status = "completed"
+    swap.updatedAt = Date.now()
+    await swap.save()
+
+    // Emit socket event to both participants
+    const otherParticipantId =
+      swap.requester._id.toString() === req.user.id ? swap.requestedItem.owner : swap.requester._id
+    emitSocketEvent(req, "swapCompleted", {
+      swapId: swap._id,
+      participant1: req.user.id,
+      participant2: otherParticipantId,
+      itemName: swap.requestedItem.name,
+      message: `Swap for ${swap.requestedItem.name} completed!`,
+    })
+
+    res.status(200).json(swap)
+  } catch (error) {
+    console.error(error)
+    res.status(500).json({ message: "Server error" })
+  }
+})
 
 // @route   PUT /api/swaps/:id/status
 // @desc    Update swap status (accept, reject, complete, cancel)
@@ -402,220 +494,12 @@ router.put(
   },
 )
 
-// @route   GET /api/swaps/:id
-// @desc    Get a single swap request by ID
-// @access  Private (initiator or receiver)
-router.get("/:id", protect, async (req, res) => {
-  try {
-    const swap = await Swap.findById(req.params.id)
-      .populate("initiator", "username profilePicture")
-      .populate("receiver", "username profilePicture")
-      .populate("initiatorItem", "name images")
-      .populate("receiverItem", "name images")
-
-    if (!swap) {
-      return res.status(404).json({ message: "Swap request not found" })
-    }
-
-    // Ensure only involved parties can view the swap details
-    if (swap.initiator.toString() !== req.user.id && swap.receiver.toString() !== req.user.id) {
-      return res.status(401).json({ message: "Not authorized to view this swap" })
-    }
-
-    res.json(swap)
-  } catch (err) {
-    console.error(err.message)
-    res.status(500).send("Server error")
-  }
-})
-
-// @route   PUT /api/swaps/:id/respond
-// @desc    Respond to swap request (accept/reject)
-// @access  Private
-router.put(
-  "/:id/respond",
-  auth,
-  [
-    body("action").isIn(["accept", "reject"]).withMessage("Invalid action"),
-    body("message").optional().trim().isLength({ max: 500 }).withMessage("Message cannot exceed 500 characters"),
-  ],
-  async (req, res) => {
-    try {
-      const errors = validationResult(req)
-      if (!errors.isEmpty()) {
-        return res.status(400).json({
-          message: "Validation failed",
-          errors: errors.array(),
-        })
-      }
-
-      const { action, message } = req.body
-
-      const swap = await Swap.findById(req.params.id)
-        .populate("requester", "username firstName lastName")
-        .populate("owner", "username firstName lastName")
-        .populate("requestedItem")
-        .populate("offeredItem")
-
-      if (!swap) {
-        return res.status(404).json({ message: "Swap not found" })
-      }
-
-      // Check if user is the owner
-      if (swap.owner._id.toString() !== req.user._id.toString()) {
-        return res.status(403).json({ message: "Only the item owner can respond to this swap" })
-      }
-
-      if (swap.status !== "pending") {
-        return res.status(400).json({ message: "Swap has already been responded to" })
-      }
-
-      if (action === "accept") {
-        // Validate items are still available
-        if (swap.requestedItem.status !== "available") {
-          return res.status(400).json({ message: "Requested item is no longer available" })
-        }
-
-        if (swap.type === "direct" && swap.offeredItem.status !== "available") {
-          return res.status(400).json({ message: "Offered item is no longer available" })
-        }
-
-        if (swap.type === "points") {
-          // Check if requester still has enough points
-          const requester = await User.findById(swap.requester._id)
-          if (requester.points < swap.pointsOffered) {
-            return res.status(400).json({ message: "Requester no longer has sufficient points" })
-          }
-        }
-
-        // Accept the swap
-        await swap.updateStatus("accepted", message)
-
-        // Reserve the items
-        swap.requestedItem.status = "reserved"
-        await swap.requestedItem.save()
-
-        if (swap.type === "direct") {
-          swap.offeredItem.status = "reserved"
-          await swap.offeredItem.save()
-        }
-
-        // Handle points transaction for point swaps
-        if (swap.type === "points") {
-          const requester = await User.findById(swap.requester._id)
-          const owner = await User.findById(swap.owner._id)
-
-          requester.points -= swap.pointsOffered
-          owner.points += swap.pointsOffered
-
-          await requester.save()
-          await owner.save()
-        }
-      } else {
-        // Reject the swap
-        await swap.updateStatus("rejected", message)
-      }
-
-      // Add message to conversation if provided
-      if (message) {
-        await swap.addMessage(req.user._id, message)
-      }
-
-      // Notify requester via socket
-      const io = req.app.get("io")
-      if (io) {
-        io.to(swap.requester._id.toString()).emit("swap-response", {
-          swapId: swap._id,
-          action,
-          message: `Your swap request has been ${action}ed`,
-        })
-      }
-
-      const updatedSwap = await Swap.findById(swap._id)
-        .populate("requester", "username firstName lastName avatar")
-        .populate("owner", "username firstName lastName avatar")
-        .populate("requestedItem", "title images pointValue")
-        .populate("offeredItem", "title images pointValue")
-
-      res.json({
-        message: `Swap ${action}ed successfully`,
-        swap: updatedSwap,
-      })
-    } catch (error) {
-      console.error("Respond to swap error:", error)
-      res.status(500).json({ message: "Server error while responding to swap" })
-    }
-  },
-)
-
-// @route   PUT /api/swaps/:id/complete
-// @desc    Mark swap as completed
-// @access  Private
-router.put("/:id/complete", auth, async (req, res) => {
-  try {
-    const swap = await Swap.findById(req.params.id).populate("requestedItem").populate("offeredItem")
-
-    if (!swap) {
-      return res.status(404).json({ message: "Swap not found" })
-    }
-
-    if (!swap.isParticipant(req.user._id)) {
-      return res.status(403).json({ message: "Access denied" })
-    }
-
-    if (swap.status !== "accepted") {
-      return res.status(400).json({ message: "Swap must be accepted before completion" })
-    }
-
-    // Mark swap as completed
-    await swap.updateStatus("completed")
-
-    // Update item statuses
-    swap.requestedItem.status = "swapped"
-    await swap.requestedItem.save()
-
-    if (swap.type === "direct") {
-      swap.offeredItem.status = "swapped"
-      await swap.offeredItem.save()
-    }
-
-    // Update user stats
-    const requester = await User.findById(swap.requester)
-    const owner = await User.findById(swap.owner)
-
-    await requester.updateStats("itemSwapped")
-    await owner.updateStats("itemSwapped")
-
-    if (swap.type === "points") {
-      await owner.updateStats("pointsEarned", swap.pointsOffered)
-    }
-
-    // Notify other participant
-    const otherParticipant = swap.getOtherParticipant(req.user._id)
-    const io = req.app.get("io")
-    if (io && otherParticipant) {
-      io.to(otherParticipant.toString()).emit("swap-completed", {
-        swapId: swap._id,
-        message: "Swap has been marked as completed",
-      })
-    }
-
-    res.json({
-      message: "Swap completed successfully",
-      swap,
-    })
-  } catch (error) {
-    console.error("Complete swap error:", error)
-    res.status(500).json({ message: "Server error while completing swap" })
-  }
-})
-
 // @route   POST /api/swaps/:id/message
 // @desc    Add message to swap conversation
 // @access  Private
 router.post(
   "/:id/message",
-  auth,
+  protect,
   [body("message").trim().isLength({ min: 1, max: 1000 }).withMessage("Message must be between 1 and 1000 characters")],
   async (req, res) => {
     try {
@@ -663,7 +547,7 @@ router.post(
 // @route   PUT /api/swaps/:id/read
 // @desc    Mark messages as read
 // @access  Private
-router.put("/:id/read", auth, async (req, res) => {
+router.put("/:id/read", protect, async (req, res) => {
   try {
     const swap = await Swap.findById(req.params.id)
 
@@ -689,7 +573,7 @@ router.put("/:id/read", auth, async (req, res) => {
 // @route   DELETE /api/swaps/:id
 // @desc    Cancel swap request
 // @access  Private
-router.delete("/:id", auth, async (req, res) => {
+router.delete("/:id", protect, async (req, res) => {
   try {
     const swap = await Swap.findById(req.params.id).populate("requestedItem").populate("offeredItem")
 

@@ -22,9 +22,10 @@ const upload = multer({ storage: storage })
 
 // @route   GET /api/items
 // @desc    Get all items with filtering and pagination
-// @access  Public
+// @access  Private
 router.get(
   "/",
+  protect,
   [
     query("page").optional().isInt({ min: 1 }).withMessage("Page must be a positive integer"),
     query("limit").optional().isInt({ min: 1, max: 50 }).withMessage("Limit must be between 1 and 50"),
@@ -154,8 +155,8 @@ router.get("/featured", async (req, res) => {
 
 // @route   GET /api/items/:id
 // @desc    Get single item by ID
-// @access  Public
-router.get("/:id", optionalAuth, async (req, res) => {
+// @access  Private
+router.get("/:id", protect, async (req, res) => {
   try {
     const item = await Item.findById(req.params.id)
       .populate("owner", "username firstName lastName avatar stats")
@@ -166,7 +167,7 @@ router.get("/:id", optionalAuth, async (req, res) => {
     }
 
     // Increment view count if not the owner
-    if (!req.user || item.owner._id.toString() !== req.user._id.toString()) {
+    if (req.user._id.toString() !== item.owner._id.toString()) {
       await item.incrementViews()
     }
 
@@ -215,7 +216,7 @@ router.post(
       } else {
         // Add a default placeholder image if no images are uploaded
         images.push({
-          url: "https://res.cloudinary.com/your_cloud_name/image/upload/v1/placeholder.jpg", // Replace with your actual placeholder URL
+          url: "https://res.cloudinary.com/your_cloud_name/image/upload/v1/placeholder.png", // Replace with your actual placeholder URL
           public_id: "placeholder_item_default",
         })
       }
@@ -468,9 +469,10 @@ router.post(
 
 // @route   GET /api/items/user/:userId
 // @desc    Get items by user
-// @access  Public
+// @access  Private
 router.get(
   "/user/:userId",
+  protect,
   [query("status").optional().isIn(["pending", "approved", "rejected", "available", "reserved", "swapped"])],
   async (req, res) => {
     try {
@@ -494,9 +496,7 @@ router.get(
         filter.status = "available"
       }
 
-      const items = await Item.find(filter)
-        .populate("owner", "username firstName lastName avatar")
-        .sort({ createdAt: -1 })
+      const items = await Item.find(filter).populate("owner", "username email profilePicture").sort({ createdAt: -1 })
 
       res.json({ items })
     } catch (error) {

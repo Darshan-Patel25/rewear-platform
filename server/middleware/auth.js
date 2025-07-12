@@ -12,7 +12,7 @@ const protect = async (req, res, next) => {
       // Verify token
       const decoded = jwt.verify(token, process.env.JWT_SECRET)
 
-      // Attach user to the request object (without password)
+      // Attach user to the request
       req.user = await User.findById(decoded.id).select("-password")
       next()
     } catch (error) {
@@ -26,17 +26,7 @@ const protect = async (req, res, next) => {
   }
 }
 
-const authorize = (...roles) => {
-  return (req, res, next) => {
-    if (!roles.includes(req.user.role)) {
-      // Assuming user model has a 'role' field, e.g., 'user', 'admin'
-      return res.status(403).json({ message: `User role ${req.user.role} is not authorized to access this route` })
-    }
-    next()
-  }
-}
-
-const adminProtect = (req, res, next) => {
+const authorizeAdmin = (req, res, next) => {
   if (req.user && req.user.isAdmin) {
     next()
   } else {
@@ -44,4 +34,4 @@ const adminProtect = (req, res, next) => {
   }
 }
 
-module.exports = { protect, authorize, adminProtect }
+module.exports = { protect, authorizeAdmin }
