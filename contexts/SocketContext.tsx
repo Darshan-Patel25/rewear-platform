@@ -2,9 +2,8 @@
 
 import type React from "react"
 import { createContext, useContext, useEffect, useState } from "react"
-import { io, type Socket } from "socket.io-client"
+import { io, Socket } from "socket.io-client"
 import { useAuth } from "./AuthContext"
-import { useToast } from "@/hooks/use-toast"
 
 interface SocketContextType {
   socket: Socket | null
@@ -16,67 +15,46 @@ const SocketContext = createContext<SocketContextType | undefined>(undefined)
 export function SocketProvider({ children }: { children: React.ReactNode }) {
   const [socket, setSocket] = useState<Socket | null>(null)
   const [isConnected, setIsConnected] = useState(false)
-  const { user } = useAuth()
-  const { toast } = useToast()
+  const { user, token } = useAuth()
 
   useEffect(() => {
-    if (user) {
+    if (user && token) {
       const socketInstance = io("http://localhost:5000", {
-        transports: ["websocket"],
+        auth: {
+          token,
+        },
       })
 
       socketInstance.on("connect", () => {
+        console.log("Connected to server")
         setIsConnected(true)
         socketInstance.emit("join-room", user._id)
       })
 
       socketInstance.on("disconnect", () => {
+        console.log("Disconnected from server")
         setIsConnected(false)
       })
 
-      // Listen for notifications
+      // Listen for real-time notifications
       socketInstance.on("new-swap-request", (data) => {
-        toast({
-          title: "New Swap Request",
-          description: data.message,
-        })
+        console.log("New swap request:", data)
+        // Handle new swap request notification
       })
 
-      socketInstance.on("swap-accepted", (data) => {
-        toast({
-          title: "Swap Accepted!",
-          description: data.message,
-        })
+      socketInstance.on("swap-response", (data) => {
+        console.log("Swap response:", data)
+        // Handle swap response notification
       })
 
-      socketInstance.on("swap-rejected", (data) => {
-        toast({
-          title: "Swap Rejected",
-          description: data.message,
-          variant: "destructive",
-        })
+      socketInstance.on("item-approved", (data) => {
+        console.log("Item approved:", data)
+        // Handle item approval notification
       })
 
-      socketInstance.on("swap-completed", (data) => {
-        toast({
-          title: "Swap Completed!",
-          description: data.message,
-        })
-      })
-
-      socketInstance.on("item-reviewed", (data) => {
-        toast({
-          title: "Item Reviewed",
-          description: data.message,
-        })
-      })
-
-      socketInstance.on("item-deleted", (data) => {
-        toast({
-          title: "Item Removed",
-          description: data.message,
-          variant: "destructive",
-        })
+      socketInstance.on("item-rejected", (data) => {
+        console.log("Item rejected:", data)
+        // Handle item rejection notification
       })
 
       setSocket(socketInstance)
@@ -85,9 +63,13 @@ export function SocketProvider({ children }: { children: React.ReactNode }) {
         socketInstance.disconnect()
       }
     }
-  }, [user, toast])
+  }, [user, token])
 
-  return <SocketContext.Provider value={{ socket, isConnected }}>{children}</SocketContext.Provider>
+  return (
+    <SocketContext.Provider value={{ socket, isConnected }}>
+      {children}
+    </SocketContext.Provider>
+  )
 }
 
 export function useSocket() {

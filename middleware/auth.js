@@ -9,11 +9,15 @@ const auth = async (req, res, next) => {
       return res.status(401).json({ message: "No token, authorization denied" })
     }
 
-    const decoded = jwt.verify(token, process.env.JWT_SECRET || "fallback_secret")
+    const decoded = jwt.verify(token, process.env.JWT_SECRET)
     const user = await User.findById(decoded.userId).select("-password")
 
-    if (!user || !user.isActive) {
+    if (!user) {
       return res.status(401).json({ message: "Token is not valid" })
+    }
+
+    if (!user.isActive) {
+      return res.status(401).json({ message: "Account is deactivated" })
     }
 
     req.user = user

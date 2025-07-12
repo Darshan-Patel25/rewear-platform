@@ -1,94 +1,128 @@
 "use client"
 
-import { useState, useEffect } from "react"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Card, CardContent } from "@/components/ui/card"
-import { Badge } from "@/components/ui/badge"
-import { Search, Recycle, Users, Star, ArrowRight, Shirt, ShoppingBag, Heart } from "lucide-react"
+import { useState } from "react"
 import Link from "next/link"
-import Image from "next/image"
-
-interface FeaturedItem {
-  _id: string
-  title: string
-  images: Array<{ url: string }>
-  pointValue: number
-  category: string
-  condition: string
-  owner: {
-    username: string
-    firstName: string
-  }
-}
+import { Button } from "@/components/ui/button"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Badge } from "@/components/ui/badge"
+import { Input } from "@/components/ui/input"
+import { Carousel, CarouselContent, CarouselItem, CarouselNext, CarouselPrevious } from "@/components/ui/carousel"
+import { Recycle, Search, Heart, Users, Leaf, Star, ArrowRight, ShoppingBag, Plus, TrendingUp, Award, Globe } from 'lucide-react'
 
 export default function LandingPage() {
-  const [featuredItems, setFeaturedItems] = useState<FeaturedItem[]>([])
   const [searchQuery, setSearchQuery] = useState("")
-  const [loading, setLoading] = useState(true)
 
-  const API_BASE_URL = "http://localhost:5000/api"
-
-  useEffect(() => {
-    fetchFeaturedItems()
-  }, [])
-
-  const fetchFeaturedItems = async () => {
-    try {
-      const response = await fetch(`${API_BASE_URL}/items/featured`)
-      if (response.ok) {
-        const data = await response.json()
-        setFeaturedItems(data.items)
-      }
-    } catch (error) {
-      console.error("Error fetching featured items:", error)
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  const handleSearch = () => {
-    if (searchQuery.trim()) {
-      window.location.href = `/browse?search=${encodeURIComponent(searchQuery)}`
-    }
-  }
+  const featuredItems = [
+    {
+      id: 1,
+      title: "Vintage Denim Jacket",
+      category: "Outerwear",
+      size: "M",
+      condition: "Good",
+      points: 85,
+      image: "/placeholder.svg?height=300&width=300",
+      owner: "Sarah M.",
+    },
+    {
+      id: 2,
+      title: "Designer Silk Blouse",
+      category: "Tops",
+      size: "S",
+      condition: "Like New",
+      points: 120,
+      image: "/placeholder.svg?height=300&width=300",
+      owner: "Emma K.",
+    },
+    {
+      id: 3,
+      title: "Leather Ankle Boots",
+      category: "Shoes",
+      size: "8",
+      condition: "Good",
+      points: 95,
+      image: "/placeholder.svg?height=300&width=300",
+      owner: "Alex R.",
+    },
+    {
+      id: 4,
+      title: "Floral Summer Dress",
+      category: "Dresses",
+      size: "L",
+      condition: "New",
+      points: 110,
+      image: "/placeholder.svg?height=300&width=300",
+      owner: "Maya P.",
+    },
+  ]
 
   const categories = [
-    { name: "Tops", icon: Shirt, count: "250+" },
-    { name: "Bottoms", icon: ShoppingBag, count: "180+" },
-    { name: "Dresses", icon: Heart, count: "120+" },
-    { name: "Shoes", icon: ShoppingBag, count: "90+" },
-    { name: "Accessories", icon: Heart, count: "200+" },
-    { name: "Outerwear", icon: Shirt, count: "75+" },
+    { name: "Tops", icon: "👕", count: 245 },
+    { name: "Bottoms", icon: "👖", count: 189 },
+    { name: "Dresses", icon: "👗", count: 156 },
+    { name: "Outerwear", icon: "🧥", count: 98 },
+    { name: "Shoes", icon: "👠", count: 167 },
+    { name: "Accessories", icon: "👜", count: 134 },
+  ]
+
+  const testimonials = [
+    {
+      name: "Jessica Chen",
+      avatar: "/placeholder-user.jpg",
+      rating: 5,
+      text: "ReWear has completely changed how I think about fashion. I've swapped over 20 items and saved hundreds of dollars!",
+    },
+    {
+      name: "Michael Torres",
+      avatar: "/placeholder-user.jpg",
+      rating: 5,
+      text: "The point system is genius. I can earn points by listing items I don't wear and use them to get things I actually need.",
+    },
+    {
+      name: "Amanda Foster",
+      avatar: "/placeholder-user.jpg",
+      rating: 5,
+      text: "Love the community aspect! I've met so many like-minded people who care about sustainable fashion.",
+    },
+  ]
+
+  const stats = [
+    { label: "Items Swapped", value: "15,000+", icon: Recycle },
+    { label: "Active Members", value: "5,000+", icon: Users },
+    { label: "CO₂ Saved", value: "2.5 tons", icon: Leaf },
+    { label: "Average Rating", value: "4.9/5", icon: Star },
   ]
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-green-50 to-blue-50">
       {/* Header */}
-      <header className="bg-white shadow-sm border-b">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center h-16">
-            <div className="flex items-center space-x-2">
+      <header className="bg-white/80 backdrop-blur-md border-b sticky top-0 z-50">
+        <div className="container mx-auto px-4 py-4">
+          <div className="flex items-center justify-between">
+            <Link href="/" className="flex items-center space-x-2">
               <Recycle className="h-8 w-8 text-green-600" />
               <span className="text-2xl font-bold text-gray-900">ReWear</span>
-            </div>
-            <nav className="hidden md:flex space-x-8">
-              <Link href="/browse" className="text-gray-700 hover:text-green-600 transition-colors">
+            </Link>
+
+            <nav className="hidden md:flex items-center space-x-8">
+              <Link href="/browse" className="text-gray-600 hover:text-green-600 transition-colors">
                 Browse Items
               </Link>
-              <Link href="/how-it-works" className="text-gray-700 hover:text-green-600 transition-colors">
+              <Link href="/how-it-works" className="text-gray-600 hover:text-green-600 transition-colors">
                 How It Works
               </Link>
-              <Link href="/about" className="text-gray-700 hover:text-green-600 transition-colors">
-                About
+              <Link href="/community" className="text-gray-600 hover:text-green-600 transition-colors">
+                Community
               </Link>
             </nav>
+
             <div className="flex items-center space-x-4">
               <Link href="/login">
-                <Button variant="ghost">Login</Button>
+                <Button variant="ghost" className="text-gray-600 hover:text-green-600">
+                  Sign In
+                </Button>
               </Link>
               <Link href="/register">
-                <Button className="bg-green-600 hover:bg-green-700">Sign Up</Button>
+                <Button className="bg-green-600 hover:bg-green-700">Get Started</Button>
               </Link>
             </div>
           </div>
@@ -96,84 +130,147 @@ export default function LandingPage() {
       </header>
 
       {/* Hero Section */}
-      <section className="relative py-20 px-4 sm:px-6 lg:px-8">
-        <div className="max-w-7xl mx-auto text-center">
-          <h1 className="text-4xl md:text-6xl font-bold text-gray-900 mb-6">
-            Sustainable Fashion Through
-            <span className="text-green-600 block">Community Exchange</span>
-          </h1>
-          <p className="text-xl text-gray-600 mb-8 max-w-3xl mx-auto">
-            Join thousands of fashion-conscious individuals who are reducing textile waste by swapping clothes and
-            earning points for sustainable choices.
-          </p>
+      <section className="py-20 px-4">
+        <div className="container mx-auto text-center">
+          <div className="max-w-4xl mx-auto">
+            <h1 className="text-5xl md:text-6xl font-bold text-gray-900 mb-6">
+              Sustainable Fashion
+              <span className="text-green-600 block">Made Simple</span>
+            </h1>
+            <p className="text-xl text-gray-600 mb-8 max-w-2xl mx-auto">
+              Join thousands of fashion lovers who are reducing waste and discovering unique pieces through our
+              community-driven clothing exchange platform.
+            </p>
 
-          {/* Search Bar */}
-          <div className="max-w-2xl mx-auto mb-8">
-            <div className="flex gap-2">
-              <Input
-                type="text"
-                placeholder="Search for clothing items..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                onKeyPress={(e) => e.key === "Enter" && handleSearch()}
-                className="flex-1 h-12 text-lg"
-              />
-              <Button onClick={handleSearch} size="lg" className="bg-green-600 hover:bg-green-700">
-                <Search className="h-5 w-5" />
-              </Button>
+            {/* Search Bar */}
+            <div className="max-w-md mx-auto mb-8">
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-5 w-5" />
+                <Input
+                  type="text"
+                  placeholder="Search for items..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="pl-10 pr-4 py-3 w-full rounded-full border-2 border-green-200 focus:border-green-500"
+                />
+              </div>
             </div>
-          </div>
 
-          {/* CTA Buttons */}
-          <div className="flex flex-col sm:flex-row gap-4 justify-center mb-16">
-            <Link href="/register">
-              <Button size="lg" className="bg-green-600 hover:bg-green-700 text-lg px-8 py-3">
-                Start Swapping
-                <ArrowRight className="ml-2 h-5 w-5" />
-              </Button>
-            </Link>
-            <Link href="/browse">
-              <Button size="lg" variant="outline" className="text-lg px-8 py-3 bg-transparent">
-                Browse Items
-              </Button>
-            </Link>
-            <Link href="/add-item">
-              <Button size="lg" variant="outline" className="text-lg px-8 py-3 bg-transparent">
-                List an Item
-              </Button>
-            </Link>
-          </div>
+            {/* CTA Buttons */}
+            <div className="flex flex-col sm:flex-row gap-4 justify-center mb-12">
+              <Link href="/browse">
+                <Button size="lg" className="bg-green-600 hover:bg-green-700 px-8 py-3 text-lg">
+                  <ShoppingBag className="mr-2 h-5 w-5" />
+                  Start Swapping
+                </Button>
+              </Link>
+              <Link href="/browse">
+                <Button size="lg" variant="outline" className="border-green-600 text-green-600 hover:bg-green-50 px-8 py-3 text-lg">
+                  Browse Items
+                </Button>
+              </Link>
+              <Link href="/add-item">
+                <Button size="lg" variant="outline" className="border-green-600 text-green-600 hover:bg-green-50 px-8 py-3 text-lg">
+                  <Plus className="mr-2 h-5 w-5" />
+                  List an Item
+                </Button>
+              </Link>
+            </div>
 
-          {/* Stats */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-8 max-w-4xl mx-auto">
-            <div className="text-center">
-              <div className="text-3xl font-bold text-green-600 mb-2">10,000+</div>
-              <div className="text-gray-600">Items Exchanged</div>
-            </div>
-            <div className="text-center">
-              <div className="text-3xl font-bold text-green-600 mb-2">5,000+</div>
-              <div className="text-gray-600">Active Members</div>
-            </div>
-            <div className="text-center">
-              <div className="text-3xl font-bold text-green-600 mb-2">50 tons</div>
-              <div className="text-gray-600">Textile Waste Saved</div>
+            {/* Stats */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-6 max-w-3xl mx-auto">
+              {stats.map((stat, index) => (
+                <div key={index} className="text-center">
+                  <div className="inline-flex items-center justify-center w-12 h-12 bg-green-100 rounded-full mb-2">
+                    <stat.icon className="h-6 w-6 text-green-600" />
+                  </div>
+                  <div className="text-2xl font-bold text-gray-900">{stat.value}</div>
+                  <div className="text-sm text-gray-600">{stat.label}</div>
+                </div>
+              ))}
             </div>
           </div>
         </div>
       </section>
 
+      {/* Featured Items Carousel */}
+      <section className="py-16 px-4 bg-white">
+        <div className="container mx-auto">
+          <div className="text-center mb-12">
+            <h2 className="text-3xl font-bold text-gray-900 mb-4">Featured Items</h2>
+            <p className="text-gray-600 max-w-2xl mx-auto">
+              Discover amazing pieces from our community. Each item is carefully reviewed to ensure quality and
+              authenticity.
+            </p>
+          </div>
+
+          <Carousel className="max-w-5xl mx-auto">
+            <CarouselContent>
+              {featuredItems.map((item) => (
+                <CarouselItem key={item.id} className="md:basis-1/2 lg:basis-1/3">
+                  <Card className="h-full hover:shadow-lg transition-shadow">
+                    <div className="aspect-square relative overflow-hidden rounded-t-lg">
+                      <img
+                        src={item.image || "/placeholder.svg"}
+                        alt={item.title}
+                        className="w-full h-full object-cover hover:scale-105 transition-transform duration-300"
+                      />
+                      <div className="absolute top-2 right-2">
+                        <Badge variant="secondary" className="bg-white/90">
+                          {item.condition}
+                        </Badge>
+                      </div>
+                    </div>
+                    <CardContent className="p-4">
+                      <h3 className="font-semibold text-lg mb-2">{item.title}</h3>
+                      <div className="flex items-center justify-between text-sm text-gray-600 mb-3">
+                        <span>{item.category}</span>
+                        <span>Size {item.size}</span>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center space-x-1">
+                          <span className="font-semibold text-green-600">{item.points} points</span>
+                        </div>
+                        <span className="text-sm text-gray-500">by {item.owner}</span>
+                      </div>
+                    </CardContent>
+                  </Card>
+                </CarouselItem>
+              ))}
+            </CarouselContent>
+            <CarouselPrevious />
+            <CarouselNext />
+          </Carousel>
+
+          <div className="text-center mt-8">
+            <Link href="/browse">
+              <Button variant="outline" className="border-green-600 text-green-600 hover:bg-green-50">
+                View All Items
+                <ArrowRight className="ml-2 h-4 w-4" />
+              </Button>
+            </Link>
+          </div>
+        </div>
+      </section>
+
       {/* Categories Section */}
-      <section className="py-16 bg-white">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <h2 className="text-3xl font-bold text-center text-gray-900 mb-12">Shop by Category</h2>
+      <section className="py-16 px-4 bg-gray-50">
+        <div className="container mx-auto">
+          <div className="text-center mb-12">
+            <h2 className="text-3xl font-bold text-gray-900 mb-4">Shop by Category</h2>
+            <p className="text-gray-600">Find exactly what you're looking for in our organized categories</p>
+          </div>
+
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-6">
-            {categories.map((category) => (
-              <Link key={category.name} href={`/browse?category=${category.name.toLowerCase()}`} className="group">
-                <Card className="text-center p-6 hover:shadow-lg transition-shadow cursor-pointer">
-                  <CardContent className="p-0">
-                    <category.icon className="h-12 w-12 mx-auto mb-4 text-green-600 group-hover:text-green-700" />
+            {categories.map((category, index) => (
+              <Link key={index} href={`/browse?category=${category.name.toLowerCase()}`}>
+                <Card className="text-center hover:shadow-lg transition-shadow cursor-pointer group">
+                  <CardContent className="p-6">
+                    <div className="text-4xl mb-3 group-hover:scale-110 transition-transform">
+                      {category.icon}
+                    </div>
                     <h3 className="font-semibold text-gray-900 mb-1">{category.name}</h3>
-                    <p className="text-sm text-gray-500">{category.count} items</p>
+                    <p className="text-sm text-gray-600">{category.count} items</p>
                   </CardContent>
                 </Card>
               </Link>
@@ -182,96 +279,48 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* Featured Items */}
-      <section className="py-16 bg-gray-50">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="text-center mb-12">
-            <h2 className="text-3xl font-bold text-gray-900 mb-4">Featured Items</h2>
-            <p className="text-gray-600">Discover amazing pieces from our community</p>
-          </div>
-
-          {loading ? (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-              {[...Array(8)].map((_, i) => (
-                <Card key={i} className="animate-pulse">
-                  <div className="aspect-square bg-gray-200 rounded-t-lg"></div>
-                  <CardContent className="p-4">
-                    <div className="h-4 bg-gray-200 rounded mb-2"></div>
-                    <div className="h-3 bg-gray-200 rounded w-2/3"></div>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-              {featuredItems.map((item) => (
-                <Link key={item._id} href={`/items/${item._id}`}>
-                  <Card className="group hover:shadow-lg transition-shadow cursor-pointer">
-                    <div className="aspect-square relative overflow-hidden rounded-t-lg">
-                      <Image
-                        src={item.images[0]?.url || "/placeholder.svg?height=300&width=300"}
-                        alt={item.title}
-                        fill
-                        className="object-cover group-hover:scale-105 transition-transform"
-                      />
-                    </div>
-                    <CardContent className="p-4">
-                      <h3 className="font-semibold text-gray-900 mb-1 truncate">{item.title}</h3>
-                      <div className="flex items-center justify-between mb-2">
-                        <Badge variant="secondary" className="text-xs">
-                          {item.category}
-                        </Badge>
-                        <span className="text-green-600 font-semibold">{item.pointValue} pts</span>
-                      </div>
-                      <p className="text-sm text-gray-500">by {item.owner.firstName}</p>
-                    </CardContent>
-                  </Card>
-                </Link>
-              ))}
-            </div>
-          )}
-
-          <div className="text-center mt-12">
-            <Link href="/browse">
-              <Button size="lg" variant="outline">
-                View All Items
-                <ArrowRight className="ml-2 h-5 w-5" />
-              </Button>
-            </Link>
-          </div>
-        </div>
-      </section>
-
       {/* How It Works */}
-      <section className="py-16 bg-white">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <h2 className="text-3xl font-bold text-center text-gray-900 mb-12">How ReWear Works</h2>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+      <section className="py-16 px-4 bg-white">
+        <div className="container mx-auto">
+          <div className="text-center mb-12">
+            <h2 className="text-3xl font-bold text-gray-900 mb-4">How ReWear Works</h2>
+            <p className="text-gray-600 max-w-2xl mx-auto">
+              Getting started with sustainable fashion has never been easier. Follow these simple steps to begin your
+              journey.
+            </p>
+          </div>
+
+          <div className="grid md:grid-cols-3 gap-8 max-w-4xl mx-auto">
             <div className="text-center">
-              <div className="bg-green-100 rounded-full w-16 h-16 flex items-center justify-center mx-auto mb-4">
-                <Shirt className="h-8 w-8 text-green-600" />
+              <div className="inline-flex items-center justify-center w-16 h-16 bg-green-100 rounded-full mb-4">
+                <Plus className="h-8 w-8 text-green-600" />
               </div>
-              <h3 className="text-xl font-semibold text-gray-900 mb-2">List Your Items</h3>
+              <h3 className="text-xl font-semibold text-gray-900 mb-3">1. List Your Items</h3>
               <p className="text-gray-600">
-                Upload photos and details of clothes you no longer wear. Set point values based on condition and brand.
+                Upload photos and details of clothing items you no longer wear. Our community will review and approve
+                quality items.
               </p>
             </div>
+
             <div className="text-center">
-              <div className="bg-blue-100 rounded-full w-16 h-16 flex items-center justify-center mx-auto mb-4">
-                <Users className="h-8 w-8 text-blue-600" />
+              <div className="inline-flex items-center justify-center w-16 h-16 bg-green-100 rounded-full mb-4">
+                <Search className="h-8 w-8 text-green-600" />
               </div>
-              <h3 className="text-xl font-semibold text-gray-900 mb-2">Connect & Swap</h3>
+              <h3 className="text-xl font-semibold text-gray-900 mb-3">2. Browse & Request</h3>
               <p className="text-gray-600">
-                Browse items from other users. Make swap requests or use points to redeem items you love.
+                Discover amazing pieces from other members. Request swaps directly or use points to redeem items you
+                love.
               </p>
             </div>
+
             <div className="text-center">
-              <div className="bg-purple-100 rounded-full w-16 h-16 flex items-center justify-center mx-auto mb-4">
-                <Star className="h-8 w-8 text-purple-600" />
+              <div className="inline-flex items-center justify-center w-16 h-16 bg-green-100 rounded-full mb-4">
+                <Recycle className="h-8 w-8 text-green-600" />
               </div>
-              <h3 className="text-xl font-semibold text-gray-900 mb-2">Earn & Enjoy</h3>
+              <h3 className="text-xl font-semibold text-gray-900 mb-3">3. Swap & Enjoy</h3>
               <p className="text-gray-600">
-                Complete swaps to earn points and build your sustainable wardrobe while helping reduce fashion waste.
+                Complete the exchange with other members and enjoy your new-to-you fashion finds while helping the
+                environment.
               </p>
             </div>
           </div>
@@ -279,183 +328,168 @@ export default function LandingPage() {
       </section>
 
       {/* Testimonials */}
-      <section className="py-16 bg-gray-50">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <h2 className="text-3xl font-bold text-center text-gray-900 mb-12">What Our Community Says</h2>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-            <Card className="p-6">
-              <CardContent className="p-0">
-                <div className="flex items-center mb-4">
-                  {[...Array(5)].map((_, i) => (
-                    <Star key={i} className="h-5 w-5 text-yellow-400 fill-current" />
-                  ))}
-                </div>
-                <p className="text-gray-600 mb-4">
-                  "ReWear has completely changed how I think about fashion. I've discovered amazing pieces while giving
-                  my old clothes new life!"
-                </p>
-                <div className="flex items-center">
-                  <div className="w-10 h-10 bg-green-200 rounded-full flex items-center justify-center mr-3">
-                    <span className="text-green-800 font-semibold">S</span>
-                  </div>
-                  <div>
-                    <p className="font-semibold text-gray-900">Sarah M.</p>
-                    <p className="text-sm text-gray-500">Fashion Enthusiast</p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
+      <section className="py-16 px-4 bg-green-50">
+        <div className="container mx-auto">
+          <div className="text-center mb-12">
+            <h2 className="text-3xl font-bold text-gray-900 mb-4">What Our Community Says</h2>
+            <p className="text-gray-600">Join thousands of satisfied members who are making a difference</p>
+          </div>
 
-            <Card className="p-6">
-              <CardContent className="p-0">
-                <div className="flex items-center mb-4">
-                  {[...Array(5)].map((_, i) => (
-                    <Star key={i} className="h-5 w-5 text-yellow-400 fill-current" />
-                  ))}
-                </div>
-                <p className="text-gray-600 mb-4">
-                  "The point system is genius! I've earned enough points to get designer pieces I could never afford
-                  otherwise."
-                </p>
-                <div className="flex items-center">
-                  <div className="w-10 h-10 bg-blue-200 rounded-full flex items-center justify-center mr-3">
-                    <span className="text-blue-800 font-semibold">M</span>
+          <div className="grid md:grid-cols-3 gap-8 max-w-5xl mx-auto">
+            {testimonials.map((testimonial, index) => (
+              <Card key={index} className="bg-white">
+                <CardContent className="p-6">
+                  <div className="flex items-center mb-4">
+                    <img
+                      src={testimonial.avatar || "/placeholder.svg"}
+                      alt={testimonial.name}
+                      className="w-12 h-12 rounded-full mr-4"
+                    />
+                    <div>
+                      <h4 className="font-semibold text-gray-900">{testimonial.name}</h4>
+                      <div className="flex items-center">
+                        {[...Array(testimonial.rating)].map((_, i) => (
+                          <Star key={i} className="h-4 w-4 text-yellow-400 fill-current" />
+                        ))}
+                      </div>
+                    </div>
                   </div>
-                  <div>
-                    <p className="font-semibold text-gray-900">Mike R.</p>
-                    <p className="text-sm text-gray-500">Sustainable Living Advocate</p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card className="p-6">
-              <CardContent className="p-0">
-                <div className="flex items-center mb-4">
-                  {[...Array(5)].map((_, i) => (
-                    <Star key={i} className="h-5 w-5 text-yellow-400 fill-current" />
-                  ))}
-                </div>
-                <p className="text-gray-600 mb-4">
-                  "Love the community aspect! I've made friends and helped reduce waste. It feels good to be part of
-                  something meaningful."
-                </p>
-                <div className="flex items-center">
-                  <div className="w-10 h-10 bg-purple-200 rounded-full flex items-center justify-center mr-3">
-                    <span className="text-purple-800 font-semibold">A</span>
-                  </div>
-                  <div>
-                    <p className="font-semibold text-gray-900">Anna L.</p>
-                    <p className="text-sm text-gray-500">Environmental Activist</p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
+                  <p className="text-gray-600 italic">"{testimonial.text}"</p>
+                </CardContent>
+              </Card>
+            ))}
           </div>
         </div>
       </section>
 
       {/* CTA Section */}
-      <section className="py-16 bg-green-600">
-        <div className="max-w-4xl mx-auto text-center px-4 sm:px-6 lg:px-8">
-          <h2 className="text-3xl font-bold text-white mb-4">Ready to Start Your Sustainable Fashion Journey?</h2>
-          <p className="text-xl text-green-100 mb-8">
-            Join thousands of users who are making fashion more sustainable, one swap at a time.
-          </p>
-          <div className="flex flex-col sm:flex-row gap-4 justify-center">
-            <Link href="/register">
-              <Button size="lg" className="bg-white text-green-600 hover:bg-gray-100 text-lg px-8 py-3">
-                Get Started Free
-                <ArrowRight className="ml-2 h-5 w-5" />
-              </Button>
-            </Link>
-            <Link href="/browse">
-              <Button
-                size="lg"
-                variant="outline"
-                className="border-white text-white hover:bg-white hover:text-green-600 text-lg px-8 py-3 bg-transparent"
-              >
-                Explore Items
-              </Button>
-            </Link>
+      <section className="py-16 px-4 bg-green-600">
+        <div className="container mx-auto text-center">
+          <div className="max-w-3xl mx-auto">
+            <h2 className="text-3xl font-bold text-white mb-4">Ready to Start Your Sustainable Fashion Journey?</h2>
+            <p className="text-green-100 text-lg mb-8">
+              Join our community today and discover a new way to refresh your wardrobe while helping the planet.
+            </p>
+            <div className="flex flex-col sm:flex-row gap-4 justify-center">
+              <Link href="/register">
+                <Button size="lg" className="bg-white text-green-600 hover:bg-gray-100 px-8 py-3 text-lg">
+                  Join ReWear Today
+                </Button>
+              </Link>
+              <Link href="/browse">
+                <Button
+                  size="lg"
+                  variant="outline"
+                  className="border-white text-white hover:bg-white hover:text-green-600 px-8 py-3 text-lg"
+                >
+                  Explore Items
+                </Button>
+              </Link>
+            </div>
           </div>
         </div>
       </section>
 
       {/* Footer */}
-      <footer className="bg-gray-900 text-white py-12">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
+      <footer className="bg-gray-900 text-white py-12 px-4">
+        <div className="container mx-auto">
+          <div className="grid md:grid-cols-4 gap-8">
             <div>
               <div className="flex items-center space-x-2 mb-4">
-                <Recycle className="h-8 w-8 text-green-400" />
-                <span className="text-2xl font-bold">ReWear</span>
+                <Recycle className="h-6 w-6 text-green-400" />
+                <span className="text-xl font-bold">ReWear</span>
               </div>
-              <p className="text-gray-400">Making fashion sustainable through community-driven clothing exchange.</p>
+              <p className="text-gray-400 mb-4">
+                Making sustainable fashion accessible to everyone through community-driven clothing exchange.
+              </p>
+              <div className="flex space-x-4">
+                <Globe className="h-5 w-5 text-gray-400 hover:text-green-400 cursor-pointer" />
+                <Heart className="h-5 w-5 text-gray-400 hover:text-green-400 cursor-pointer" />
+                <Users className="h-5 w-5 text-gray-400 hover:text-green-400 cursor-pointer" />
+              </div>
             </div>
+
             <div>
-              <h3 className="text-lg font-semibold mb-4">Platform</h3>
+              <h3 className="font-semibold mb-4">Platform</h3>
               <ul className="space-y-2 text-gray-400">
                 <li>
-                  <Link href="/browse" className="hover:text-white">
+                  <Link href="/browse" className="hover:text-white transition-colors">
                     Browse Items
                   </Link>
                 </li>
                 <li>
-                  <Link href="/how-it-works" className="hover:text-white">
+                  <Link href="/how-it-works" className="hover:text-white transition-colors">
                     How It Works
                   </Link>
                 </li>
                 <li>
-                  <Link href="/pricing" className="hover:text-white">
+                  <Link href="/pricing" className="hover:text-white transition-colors">
                     Pricing
+                  </Link>
+                </li>
+                <li>
+                  <Link href="/mobile" className="hover:text-white transition-colors">
+                    Mobile App
                   </Link>
                 </li>
               </ul>
             </div>
+
             <div>
-              <h3 className="text-lg font-semibold mb-4">Support</h3>
+              <h3 className="font-semibold mb-4">Community</h3>
               <ul className="space-y-2 text-gray-400">
                 <li>
-                  <Link href="/help" className="hover:text-white">
+                  <Link href="/community" className="hover:text-white transition-colors">
+                    Community
+                  </Link>
+                </li>
+                <li>
+                  <Link href="/blog" className="hover:text-white transition-colors">
+                    Blog
+                  </Link>
+                </li>
+                <li>
+                  <Link href="/events" className="hover:text-white transition-colors">
+                    Events
+                  </Link>
+                </li>
+                <li>
+                  <Link href="/sustainability" className="hover:text-white transition-colors">
+                    Sustainability
+                  </Link>
+                </li>
+              </ul>
+            </div>
+
+            <div>
+              <h3 className="font-semibold mb-4">Support</h3>
+              <ul className="space-y-2 text-gray-400">
+                <li>
+                  <Link href="/help" className="hover:text-white transition-colors">
                     Help Center
                   </Link>
                 </li>
                 <li>
-                  <Link href="/contact" className="hover:text-white">
+                  <Link href="/contact" className="hover:text-white transition-colors">
                     Contact Us
                   </Link>
                 </li>
                 <li>
-                  <Link href="/community" className="hover:text-white">
-                    Community
-                  </Link>
-                </li>
-              </ul>
-            </div>
-            <div>
-              <h3 className="text-lg font-semibold mb-4">Legal</h3>
-              <ul className="space-y-2 text-gray-400">
-                <li>
-                  <Link href="/privacy" className="hover:text-white">
-                    Privacy Policy
-                  </Link>
-                </li>
-                <li>
-                  <Link href="/terms" className="hover:text-white">
+                  <Link href="/terms" className="hover:text-white transition-colors">
                     Terms of Service
                   </Link>
                 </li>
                 <li>
-                  <Link href="/cookies" className="hover:text-white">
-                    Cookie Policy
+                  <Link href="/privacy" className="hover:text-white transition-colors">
+                    Privacy Policy
                   </Link>
                 </li>
               </ul>
             </div>
           </div>
+
           <div className="border-t border-gray-800 mt-8 pt-8 text-center text-gray-400">
-            <p>&copy; 2024 ReWear. All rights reserved.</p>
+            <p>&copy; 2024 ReWear. All rights reserved. Made with ❤️ for sustainable fashion.</p>
           </div>
         </div>
       </footer>

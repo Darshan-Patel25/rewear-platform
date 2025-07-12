@@ -5,72 +5,80 @@ const userSchema = new mongoose.Schema(
   {
     username: {
       type: String,
-      required: [true, "Username is required"],
+      required: true,
       unique: true,
       trim: true,
-      minlength: [3, "Username must be at least 3 characters"],
-      maxlength: [30, "Username cannot exceed 30 characters"],
+      minlength: 3,
+      maxlength: 30,
     },
     email: {
       type: String,
-      required: [true, "Email is required"],
+      required: true,
       unique: true,
       lowercase: true,
-      match: [/^\w+([.-]?\w+)*@\w+([.-]?\w+)*(\.\w{2,3})+$/, "Please enter a valid email"],
+      trim: true,
     },
     password: {
       type: String,
-      required: [true, "Password is required"],
-      minlength: [6, "Password must be at least 6 characters"],
+      required: true,
+      minlength: 6,
     },
     firstName: {
       type: String,
-      required: [true, "First name is required"],
+      required: true,
       trim: true,
     },
     lastName: {
       type: String,
-      required: [true, "Last name is required"],
+      required: true,
       trim: true,
     },
     avatar: {
       type: String,
-      default: "",
+      default: null,
     },
     points: {
       type: Number,
-      default: 100,
-      min: 0,
+      default: 100, // Starting points for new users
     },
     role: {
       type: String,
       enum: ["user", "admin"],
       default: "user",
     },
-    address: {
-      street: String,
-      city: String,
-      state: String,
-      zipCode: String,
-      country: String,
-    },
-    phone: {
-      type: String,
-      match: [/^\+?[\d\s-()]+$/, "Please enter a valid phone number"],
-    },
     isActive: {
       type: Boolean,
       default: true,
     },
-    lastLogin: {
-      type: Date,
-      default: Date.now,
+    bio: {
+      type: String,
+      maxlength: 500,
+    },
+    location: {
+      city: String,
+      state: String,
+      country: String,
+    },
+    preferences: {
+      categories: [String],
+      sizes: [String],
+      brands: [String],
+    },
+    stats: {
+      itemsListed: { type: Number, default: 0 },
+      itemsSwapped: { type: Number, default: 0 },
+      pointsEarned: { type: Number, default: 0 },
+      pointsSpent: { type: Number, default: 0 },
     },
   },
   {
     timestamps: true,
   },
 )
+
+// Index for search optimization
+userSchema.index({ username: 1, email: 1 })
+userSchema.index({ "location.city": 1, "location.state": 1 })
 
 // Hash password before saving
 userSchema.pre("save", async function (next) {
@@ -87,7 +95,7 @@ userSchema.pre("save", async function (next) {
 
 // Compare password method
 userSchema.methods.comparePassword = async function (candidatePassword) {
-  return await bcrypt.compare(candidatePassword, this.password)
+  return bcrypt.compare(candidatePassword, this.password)
 }
 
 // Remove password from JSON output

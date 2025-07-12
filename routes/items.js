@@ -6,7 +6,9 @@ const { auth } = require("../middleware/auth")
 
 const router = express.Router()
 
-// Get all approved items with filtering and pagination
+// @route   GET /api/items
+// @desc    Get all approved items with filtering and pagination
+// @access  Public
 router.get(
   "/",
   [
@@ -14,11 +16,23 @@ router.get(
     query("limit").optional().isInt({ min: 1, max: 50 }).withMessage("Limit must be between 1 and 50"),
     query("category")
       .optional()
-      .isIn(["tops", "bottoms", "dresses", "outerwear", "shoes", "accessories", "activewear", "formal"]),
+      .isIn([
+        "tops",
+        "bottoms",
+        "dresses",
+        "outerwear",
+        "shoes",
+        "accessories",
+        "activewear",
+        "formal",
+        "casual",
+        "vintage",
+      ]),
     query("size").optional().isIn(["XS", "S", "M", "L", "XL", "XXL", "6", "7", "8", "9", "10", "11", "12", "One Size"]),
-    query("condition").optional().isIn(["new", "like-new", "good", "fair"]),
-    query("minPoints").optional().isInt({ min: 0 }),
-    query("maxPoints").optional().isInt({ min: 0 }),
+    query("condition").optional().isIn(["new", "like-new", "good", "fair", "worn"]),
+    query("minPoints").optional().isInt({ min: 1 }),
+    query("maxPoints").optional().isInt({ min: 1 }),
+    query("search").optional().isLength({ min: 1, max: 100 }),
   ],
   async (req, res) => {
     try {
@@ -37,45 +51,31 @@ router.get(
       // Build filter object
       const filter = {
         status: "approved",
-        isAvailable: true,
+        availability: "available",
       }
 
       if (req.query.category) filter.category = req.query.category
       if (req.query.size) filter.size = req.query.size
       if (req.query.condition) filter.condition = req.query.condition
-      if (req.query.search) {
-        filter.$text = { $search: req.query.search }
-      }
       if (req.query.minPoints || req.query.maxPoints) {
         filter.pointValue = {}
         if (req.query.minPoints) filter.pointValue.$gte = Number.parseInt(req.query.minPoints)
         if (req.query.maxPoints) filter.pointValue.$lte = Number.parseInt(req.query.maxPoints)
       }
 
-      // Build sort object
-      let sort = { createdAt: -1 }
-      if (req.query.sortBy) {
-        switch (req.query.sortBy) {
-          case "points-low":
-            sort = { pointValue: 1 }
-            break
-          case "points-high":
-            sort = { pointValue: -1 }
-            break
-          case "newest":
-            sort = { createdAt: -1 }
-            break
-          case "oldest":
-            sort = { createdAt: 1 }
-            break
-          case "popular":
-            sort = { views: -1, likes: -1 }
-            break
-        }
+      // Text search
+      if (req.query.search) {
+        filter.$text = { $search: req.query.search }
       }
 
+      // Sort options
+      let sort = { createdAt: -1 } // Default: newest first
+      if (req.query.sort === "points-low") sort = { pointValue: 1 }
+      if (req.query.sort === "points-high") sort = { pointValue: -1 }
+      if (req.query.sort === "popular") sort = { views: -1, likes: -1 }
+
       const items = await Item.find(filter)
-        .populate("owner", "username firstName lastName avatar")
+        .populate("owner", "username firstName lastName avatar location")
         .sort(sort)
         .skip(skip)
         .limit(limit)
@@ -96,35 +96,18 @@ router.get(
       })
     } catch (error) {
       console.error("Get items error:", error)
-      res.status(500).json({ message: "Server error" })
+      res.status(500).json({ message: "Server error while fetching items" })
     }
   },
 )
 
-// Get featured items
-router.get("/featured", async (req, res) => {
-  try {
-    const items = await Item.find({
-      status: "approved",
-      isAvailable: true,
-    })
-      .populate("owner", "username firstName lastName avatar")
-      .sort({ views: -1, likes: -1, createdAt: -1 })
-      .limit(8)
-      .lean()
-
-    res.json({ items })
-  } catch (error) {
-    console.error("Get featured items error:", error)
-    res.status(500).json({ message: "Server error" })
-  }
-})
-
-// Get single item
+// @route   GET /api/items/:id
+// @desc    Get single item by ID
+// @access  Public
 router.get("/:id", async (req, res) => {
   try {
     const item = await Item.findById(req.params.id)
-      .populate("owner", "username firstName lastName avatar points")
+      .populate("owner", "username firstName lastName avatar location stats")
       .populate("likes", "username")
 
     if (!item) {
@@ -134,30 +117,69 @@ router.get("/:id", async (req, res) => {
     // Increment view count
     await Item.findByIdAndUpdate(req.params.id, { $inc: { views: 1 } })
 
-    res.json({ item })
+    res.json(item)
   } catch (error) {
     console.error("Get item error:", error)
-    res.status(500).json({ message: "Server error" })
+    if (error.name === "CastError") {
+      return res.status(404).json({ message: "Item not found" })
+    }
+    res.status(500).json({ message: "Server error while fetching item" })
   }
 })
 
-// Create new item
+// @route   POST /api/items
+// @desc    Create new item
+// @access  Private
 router.post(
   "/",
   auth,
   [
-    body("title").notEmpty().isLength({ max: 100 }).withMessage("Title is required and must be under 100 characters"),
+    body("title").trim().isLength({ min: 1, max: 100 }).withMessage("Title must be between 1 and 100 characters"),
     body("description")
-      .notEmpty()
-      .isLength({ max: 1000 })
-      .withMessage("Description is required and must be under 1000 characters"),
-    body("category").isIn(["tops", "bottoms", "dresses", "outerwear", "shoes", "accessories", "activewear", "formal"]),
-    body("type").notEmpty().withMessage("Type is required"),
+      .trim()
+      .isLength({ min: 10, max: 1000 })
+      .withMessage("Description must be between 10 and 1000 characters"),
+    body("category").isIn([
+      "tops",
+      "bottoms",
+      "dresses",
+      "outerwear",
+      "shoes",
+      "accessories",
+      "activewear",
+      "formal",
+      "casual",
+      "vintage",
+    ]),
+    body("type").isIn([
+      "shirt",
+      "blouse",
+      "sweater",
+      "jacket",
+      "coat",
+      "jeans",
+      "pants",
+      "shorts",
+      "skirt",
+      "dress",
+      "sneakers",
+      "boots",
+      "heels",
+      "sandals",
+      "bag",
+      "jewelry",
+      "hat",
+      "scarf",
+      "belt",
+      "other",
+    ]),
     body("size").isIn(["XS", "S", "M", "L", "XL", "XXL", "6", "7", "8", "9", "10", "11", "12", "One Size"]),
-    body("condition").isIn(["new", "like-new", "good", "fair"]),
-    body("color").notEmpty().withMessage("Color is required"),
-    body("pointValue").isInt({ min: 1, max: 500 }).withMessage("Point value must be between 1 and 500"),
-    body("images").isArray({ min: 1 }).withMessage("At least one image is required"),
+    body("condition").isIn(["new", "like-new", "good", "fair", "worn"]),
+    body("color").trim().notEmpty().withMessage("Color is required"),
+    body("brand").optional().trim(),
+    body("material").optional().trim(),
+    body("tags").optional().isArray(),
+    body("pointValue").optional().isInt({ min: 1, max: 500 }),
   ],
   async (req, res) => {
     try {
@@ -172,12 +194,18 @@ router.post(
       const itemData = {
         ...req.body,
         owner: req.user._id,
-        tags: req.body.tags || [],
+        location: req.user.location,
       }
 
       const item = new Item(itemData)
       await item.save()
 
+      // Update user stats
+      await User.findByIdAndUpdate(req.user._id, {
+        $inc: { "stats.itemsListed": 1 },
+      })
+
+      // Populate owner info for response
       await item.populate("owner", "username firstName lastName avatar")
 
       // Emit real-time notification to admins
@@ -187,23 +215,40 @@ router.post(
       })
 
       res.status(201).json({
-        message: "Item created successfully and pending approval",
+        message: "Item created successfully and submitted for review",
         item,
       })
     } catch (error) {
       console.error("Create item error:", error)
-      res.status(500).json({ message: "Server error" })
+      res.status(500).json({ message: "Server error while creating item" })
     }
   },
 )
 
-// Update item (only owner can update)
+// @route   PUT /api/items/:id
+// @desc    Update item (owner only)
+// @access  Private
 router.put(
   "/:id",
   auth,
   [
-    body("title").optional().isLength({ max: 100 }),
-    body("description").optional().isLength({ max: 1000 }),
+    body("title").optional().trim().isLength({ min: 1, max: 100 }),
+    body("description").optional().trim().isLength({ min: 10, max: 1000 }),
+    body("category")
+      .optional()
+      .isIn([
+        "tops",
+        "bottoms",
+        "dresses",
+        "outerwear",
+        "shoes",
+        "accessories",
+        "activewear",
+        "formal",
+        "casual",
+        "vintage",
+      ]),
+    body("condition").optional().isIn(["new", "like-new", "good", "fair", "worn"]),
     body("pointValue").optional().isInt({ min: 1, max: 500 }),
   ],
   async (req, res) => {
@@ -222,15 +267,27 @@ router.put(
         return res.status(404).json({ message: "Item not found" })
       }
 
+      // Check ownership
       if (item.owner.toString() !== req.user._id.toString()) {
         return res.status(403).json({ message: "Not authorized to update this item" })
       }
 
-      if (item.status === "swapped" || item.status === "redeemed") {
-        return res.status(400).json({ message: "Cannot update completed items" })
+      // Don't allow updates if item is in a swap
+      if (item.availability !== "available") {
+        return res.status(400).json({ message: "Cannot update item that is not available" })
       }
 
-      const allowedUpdates = ["title", "description", "pointValue", "tags", "images"]
+      const allowedUpdates = [
+        "title",
+        "description",
+        "category",
+        "condition",
+        "color",
+        "brand",
+        "material",
+        "tags",
+        "pointValue",
+      ]
       const updates = {}
 
       Object.keys(req.body).forEach((key) => {
@@ -239,16 +296,17 @@ router.put(
         }
       })
 
-      // Reset status to pending if item was previously rejected
-      if (item.status === "rejected") {
+      // Reset status to pending if significant changes made
+      const significantFields = ["title", "description", "category", "condition"]
+      if (significantFields.some((field) => updates[field])) {
         updates.status = "pending"
-        updates.rejectionReason = undefined
       }
 
-      const updatedItem = await Item.findByIdAndUpdate(req.params.id, updates, {
-        new: true,
-        runValidators: true,
-      }).populate("owner", "username firstName lastName avatar")
+      const updatedItem = await Item.findByIdAndUpdate(
+        req.params.id,
+        { $set: updates },
+        { new: true, runValidators: true },
+      ).populate("owner", "username firstName lastName avatar")
 
       res.json({
         message: "Item updated successfully",
@@ -256,12 +314,44 @@ router.put(
       })
     } catch (error) {
       console.error("Update item error:", error)
-      res.status(500).json({ message: "Server error" })
+      res.status(500).json({ message: "Server error while updating item" })
     }
   },
 )
 
-// Toggle like item
+// @route   DELETE /api/items/:id
+// @desc    Delete item (owner only)
+// @access  Private
+router.delete("/:id", auth, async (req, res) => {
+  try {
+    const item = await Item.findById(req.params.id)
+
+    if (!item) {
+      return res.status(404).json({ message: "Item not found" })
+    }
+
+    // Check ownership
+    if (item.owner.toString() !== req.user._id.toString()) {
+      return res.status(403).json({ message: "Not authorized to delete this item" })
+    }
+
+    // Don't allow deletion if item is in a swap
+    if (item.availability === "pending-swap") {
+      return res.status(400).json({ message: "Cannot delete item that is in a pending swap" })
+    }
+
+    await Item.findByIdAndDelete(req.params.id)
+
+    res.json({ message: "Item deleted successfully" })
+  } catch (error) {
+    console.error("Delete item error:", error)
+    res.status(500).json({ message: "Server error while deleting item" })
+  }
+})
+
+// @route   POST /api/items/:id/like
+// @desc    Like/unlike an item
+// @access  Private
 router.post("/:id/like", auth, async (req, res) => {
   try {
     const item = await Item.findById(req.params.id)
@@ -274,8 +364,10 @@ router.post("/:id/like", auth, async (req, res) => {
     const isLiked = item.likes.includes(userId)
 
     if (isLiked) {
-      item.likes.pull(userId)
+      // Unlike
+      item.likes = item.likes.filter((id) => id.toString() !== userId.toString())
     } else {
+      // Like
       item.likes.push(userId)
     }
 
@@ -287,59 +379,33 @@ router.post("/:id/like", auth, async (req, res) => {
       likesCount: item.likes.length,
     })
   } catch (error) {
-    console.error("Toggle like error:", error)
-    res.status(500).json({ message: "Server error" })
+    console.error("Like item error:", error)
+    res.status(500).json({ message: "Server error while liking item" })
   }
 })
 
-// Delete item (only owner can delete)
-router.delete("/:id", auth, async (req, res) => {
-  try {
-    const item = await Item.findById(req.params.id)
-
-    if (!item) {
-      return res.status(404).json({ message: "Item not found" })
-    }
-
-    if (item.owner.toString() !== req.user._id.toString()) {
-      return res.status(403).json({ message: "Not authorized to delete this item" })
-    }
-
-    if (item.status === "swapped" || item.status === "redeemed") {
-      return res.status(400).json({ message: "Cannot delete completed items" })
-    }
-
-    await Item.findByIdAndDelete(req.params.id)
-
-    res.json({ message: "Item deleted successfully" })
-  } catch (error) {
-    console.error("Delete item error:", error)
-    res.status(500).json({ message: "Server error" })
-  }
-})
-
-// Get user's items
+// @route   GET /api/items/user/:userId
+// @desc    Get items by user
+// @access  Public
 router.get("/user/:userId", async (req, res) => {
   try {
     const page = Number.parseInt(req.query.page) || 1
     const limit = Number.parseInt(req.query.limit) || 12
     const skip = (page - 1) * limit
 
-    const filter = { owner: req.params.userId }
-
-    // If not the owner, only show approved and available items
-    if (!req.user || req.user._id.toString() !== req.params.userId) {
-      filter.status = "approved"
-      filter.isAvailable = true
-    }
-
-    const items = await Item.find(filter)
+    const items = await Item.find({
+      owner: req.params.userId,
+      status: "approved",
+    })
       .populate("owner", "username firstName lastName avatar")
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(limit)
 
-    const total = await Item.countDocuments(filter)
+    const total = await Item.countDocuments({
+      owner: req.params.userId,
+      status: "approved",
+    })
 
     res.json({
       items,
@@ -351,7 +417,7 @@ router.get("/user/:userId", async (req, res) => {
     })
   } catch (error) {
     console.error("Get user items error:", error)
-    res.status(500).json({ message: "Server error" })
+    res.status(500).json({ message: "Server error while fetching user items" })
   }
 })
 
